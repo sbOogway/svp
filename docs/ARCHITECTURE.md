@@ -89,8 +89,8 @@ footprint) is the core feature; order execution is out of scope for now.
 - GitHub: issues, milestones, PRs into a protected `main`, Conventional Commits.
 - **No GitHub Actions.** All checks run locally through versioned git hooks
   (`.githooks/`, enabled by `core.hooksPath`): `pre-commit` runs the fast checks
-  on touched areas, `commit-msg` enforces Conventional Commits, `pre-push` runs
-  the full `make ci` and publishes Pages from `main`. `make ci-clean` builds
+  on touched areas, `commit-msg` enforces Conventional Commits, `pre-push` runs the full `make ci`, and `post-merge` publishes Pages when a
+  pull of `main` changed `frontend/` (main is protected: it only moves by merging PRs). `make ci-clean` builds
   from scratch before a release.
 - Known trade-offs, accepted for a solo project: hooks can be bypassed with
   `--no-verify` and GitHub cannot require them; nothing runs unattended

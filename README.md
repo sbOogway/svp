@@ -30,6 +30,7 @@ Requirements: [rustup](https://rustup.rs) (toolchain pinned in `rust-toolchain.t
 ./scripts/setup.sh     # installs git hooks + frontend deps
 make ci-fast           # fmt, clippy, typecheck, lint  (what pre-commit runs)
 make ci                # + tests, audit, release build  (what pre-push runs)
+make deploy-pages      # publish frontend to GitHub Pages (post-merge does this on main)
 cd backend && cargo run
 cd frontend && npm run dev
 ```
