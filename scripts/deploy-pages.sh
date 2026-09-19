@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Publish frontend/dist to the gh-pages branch (GitHub Pages "deploy from branch").
-# Called by the pre-push hook when pushing main, or by hand via `make deploy-pages`.
+# Called by the post-merge hook when a pull of main touched frontend/, or by hand via `make deploy-pages`.
 set -euo pipefail
 cd "$(dirname "$0")/../frontend"
 
