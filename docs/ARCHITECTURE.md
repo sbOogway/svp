@@ -78,7 +78,7 @@ footprint) is the core feature; order execution is out of scope for now.
   (no open ports) with **Cloudflare Access** in front (identity-based auth;
   the backend verifies `Cf-Access-Jwt-Assertion`). Frontend on **GitHub
   Pages**, "deploy from branch" (`gh-pages`), published by `scripts/deploy-pages.sh`
-  from the `pre-push` hook when `main` is pushed. HTTPS/WSS is mandatory because
+  from the `post-merge` hook when a pull of `main` changed `frontend/`. HTTPS/WSS is mandatory because
   Pages is HTTPS (mixed content).
 - Restricting the backend to the Pages origin only protects against other
   websites using a visitor's browser; it does not authenticate people — Access
