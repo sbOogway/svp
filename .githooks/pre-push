@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Full local CI before anything leaves this machine; publish Pages when main is pushed.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+pushing_main=false
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [[ "$remote_ref" == "refs/heads/main" ]] && pushing_main=true
+  # Deleting a branch: nothing to check.
+  [[ "$local_sha" =~ ^0+$ ]] && continue
+done
+
+echo "pre-push: running full CI (make ci)"
+make ci
+
+if $pushing_main; then
+  echo "pre-push: main is being pushed -> publishing frontend to GitHub Pages"
+  ./scripts/deploy-pages.sh
+fi

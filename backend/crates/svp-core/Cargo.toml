@@ -1,0 +1,18 @@
+[package]
+name = "svp-core"
+description = "Market data ingestion and bar aggregation (Nautilus Trader actor and bridge)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+svp-protocol = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[lints]
+workspace = true
