@@ -6,7 +6,7 @@ many exchanges, aggregates them into enriched candles (buy/sell volume, delta,
 VWAP…), and streams them over WebSocket to a TypeScript frontend built on
 [KLineChart](https://klinecharts.com).
 
-Status: **M0 — foundations**. See the [milestones](https://github.com/sbOogway/svp/milestones)
+Status: **M1 — multi-venue trade-driven aggregation**. See the [milestones](https://github.com/sbOogway/svp/milestones)
 and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Layout
@@ -31,9 +31,13 @@ Requirements: [rustup](https://rustup.rs) (toolchain pinned in `rust-toolchain.t
 make ci-fast           # fmt, clippy, typecheck, lint  (what pre-commit runs)
 make ci                # + tests, audit, release build  (what pre-push runs)
 make deploy-pages      # publish frontend to GitHub Pages (post-merge does this on main)
-cd backend && cargo run
+cd backend && cargo run   # connects to Binance USD-M and logs BTCUSDT-PERP trades
 cd frontend && npm run dev
 ```
+
+Logging: Nautilus components log through the `log` crate, configured with
+`NAUTILUS_LOG` (e.g. `NAUTILUS_LOG="stdout=Debug"`); svp's own code logs through
+`tracing`, filtered with `RUST_LOG`.
 
 ## Licensing
 

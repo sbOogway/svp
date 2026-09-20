@@ -29,6 +29,15 @@ footprint) is the core feature; order execution is out of scope for now.
   trade count, VWAP) and reconciles it with the OHLCV bar delivered by `on_bar`.
 - Volumes are normalized to base-asset quantity using instrument metadata
   (linear vs inverse contracts differ across venues).
+- **Logging**: the Nautilus kernel registers the global `log` logger and refuses
+  to start if another one is present, so the binary installs its `tracing`
+  subscriber *without* the `log` bridge (`set_global_default`, not
+  `fmt().init()`). Code that runs inside the node (actors) uses `log`; the web
+  server uses `tracing`. Filters: `NAUTILUS_LOG` and `RUST_LOG` respectively.
+- **Trade streams are venue-specific**: Binance futures deliver `aggTrade`
+  (fills of one taker order at one price merged), so `n_trades` counts
+  aggregated trades there, not individual fills. Recorded per venue as each
+  adapter lands (M1 #8).
 - **Threading**: the Nautilus node is single-threaded (`Rc<RefCell>`, `!Send`).
   The actor does no I/O; it pushes `BarEvent`s into a `tokio::sync::broadcast`
   channel. The web server consumes that channel on the multi-threaded runtime.
