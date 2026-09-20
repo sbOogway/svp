@@ -8,7 +8,7 @@ frontend/dist/
 .env
 .env.*
 !.env.example
-config/local.toml
+backend/config/local.toml
 # Editors / OS
 .idea/
 .vscode/

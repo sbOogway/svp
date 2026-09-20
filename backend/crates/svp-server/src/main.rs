@@ -1,9 +1,7 @@
 //! svp backend binary. Populated in milestones M1 and M2.
 
-use nautilus_model::identifiers::InstrumentId;
+use svp_core::config::Config;
 use tracing_subscriber::EnvFilter;
-
-const DEFAULT_INSTRUMENT_ID: &str = "BTCUSDT-PERP.BINANCE";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -16,10 +14,14 @@ async fn main() -> anyhow::Result<()> {
     tracing::subscriber::set_global_default(subscriber)?;
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "svp starting");
 
-    let instrument_id =
-        std::env::var("SVP_INSTRUMENT_ID").unwrap_or_else(|_| DEFAULT_INSTRUMENT_ID.to_string());
-    let instrument_ids = vec![InstrumentId::from(instrument_id.as_str())];
+    let config = Config::load()?;
+    tracing::info!(
+        venues = ?config.enabled_venues().map(|v| v.id.as_str()).collect::<Vec<_>>(),
+        instruments = config.active_instruments().count(),
+        timeframes = ?config.bars.timeframes.iter().map(ToString::to_string).collect::<Vec<_>>(),
+        "configuration loaded"
+    );
 
-    let mut node = svp_core::node::build(instrument_ids)?;
+    let mut node = svp_core::node::build(&config)?;
     node.run().await
 }

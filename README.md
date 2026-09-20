@@ -31,9 +31,15 @@ Requirements: [rustup](https://rustup.rs) (toolchain pinned in `rust-toolchain.t
 make ci-fast           # fmt, clippy, typecheck, lint  (what pre-commit runs)
 make ci                # + tests, audit, release build  (what pre-push runs)
 make deploy-pages      # publish frontend to GitHub Pages (post-merge does this on main)
-cd backend && cargo run   # connects to Binance USD-M and logs BTCUSDT-PERP trades
+cd backend && cargo run   # subscribes to every instrument in config/ and logs trades
 cd frontend && npm run dev
 ```
+
+Configuration: `backend/config/default.toml` is committed and documents every
+section (`[server]`, `[bars]`, `[[venue]]`, `[[instrument]]`, `[[asset]]`).
+Override per deployment with `backend/config/local.toml` (gitignored) or
+`SVP__SECTION__KEY` environment variables; point elsewhere with
+`SVP_CONFIG_DIR`. Invalid config fails at startup with the offending entry.
 
 Logging: Nautilus components log through the `log` crate, configured with
 `NAUTILUS_LOG` (e.g. `NAUTILUS_LOG="stdout=Debug"`); svp's own code logs through

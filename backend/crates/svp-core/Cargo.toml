@@ -11,13 +11,19 @@ authors.workspace = true
 [dependencies]
 svp-protocol = { workspace = true }
 anyhow = { workspace = true }
+config = { workspace = true }
 log = { workspace = true }
 nautilus-binance = { workspace = true }
 nautilus-common = { workspace = true }
 nautilus-live = { workspace = true }
 nautilus-model = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints]
 workspace = true

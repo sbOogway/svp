@@ -15,6 +15,7 @@ svp-protocol = { path = "crates/svp-protocol" }
 svp-core = { path = "crates/svp-core" }
 
 anyhow = "1"
+config = { version = "0.15", default-features = false, features = ["toml"] }
 log = "0.4"
 # Nautilus is pinned exactly: its Rust API changes between the ~biweekly releases.
 nautilus-binance = "=0.64.0"

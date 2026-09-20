@@ -5,4 +5,5 @@
 //! in this crate does I/O from an actor; data leaves the node through channels.
 
 pub mod actor;
+pub mod config;
 pub mod node;

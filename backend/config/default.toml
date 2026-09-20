@@ -1,0 +1,71 @@
+# svp default configuration. Committed; override per deployment with
+# config/local.toml (gitignored) or environment variables:
+#   SVP__SERVER__BIND=0.0.0.0:8080
+#   SVP__BARS__TIMEFRAMES=1m,5m
+# Arrays of tables ([[venue]], [[instrument]], [[asset]]) can only be
+# overridden from local.toml. Directory: $SVP_CONFIG_DIR, default ./config.
+
+[server]
+bind = "127.0.0.1:8080"
+
+[bars]
+# Built locally from the trade stream; suffixes: s, m, h, d.
+timeframes = ["1m", "5m", "15m", "1h"]
+
+# One data client per venue entry. `id` is svp's name for the client; `adapter`
+# picks the Nautilus adapter; `product_type` and `params` are adapter-specific.
+[[venue]]
+id = "binance-usdm"
+adapter = "binance"
+product_type = "usdm"
+
+[[venue]]
+id = "bybit"
+adapter = "bybit"
+enabled = false
+
+[[venue]]
+id = "okx"
+adapter = "okx"
+enabled = false
+
+[[venue]]
+id = "bitmex"
+adapter = "bitmex"
+enabled = false
+
+[[venue]]
+id = "deribit"
+adapter = "deribit"
+enabled = false
+
+[[venue]]
+id = "kraken-futures"
+adapter = "kraken"
+product_type = "futures"
+enabled = false
+
+[[venue]]
+id = "hyperliquid"
+adapter = "hyperliquid"
+enabled = false
+
+[[venue]]
+id = "dydx"
+adapter = "dydx"
+enabled = false
+
+[[venue]]
+id = "coinbase"
+adapter = "coinbase"
+enabled = false
+
+# Nautilus instrument ids (SYMBOL.VENUE), each bound to a venue entry above.
+[[instrument]]
+venue = "binance-usdm"
+id = "BTCUSDT-PERP.BINANCE"
+
+# Canonical asset groups: what the UI shows as one asset across venues.
+[[asset]]
+id = "btc-perp"
+instruments = ["BTCUSDT-PERP.BINANCE"]
