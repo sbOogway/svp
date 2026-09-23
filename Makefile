@@ -32,7 +32,7 @@ build:
 
 ci-fast: fmt lint typecheck 
 
-ci: ci-fast test audit build 
+ci: ci-fast test audit
 
 ci-clean: 
 	cd backend && cargo clean

@@ -8,5 +8,8 @@
    `feat(core): …`, `fix(server): …`, `docs: …`. Scopes: `protocol`, `core`,
    `server`, `frontend`, `infra`, `docs`.
 5. `make ci` must pass locally — the `pre-push` hook enforces it. There is no hosted CI.
+   CI never builds: it checks formatting, lints, types, tests and audits only.
+   Do not add `build` (or any release build) to `ci` or to the hooks; run
+   `make build` by hand when you need the artifacts.
 6. Open a PR with the template; rebase-merge into `main` (the only merge method
    enabled). Every commit lands on `main` as-is, so keep each one meaningful.
