@@ -1,5 +1,4 @@
 # Rust
-backend/target/
 target/
 # Secrets & local config
 .env

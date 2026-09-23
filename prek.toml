@@ -19,8 +19,8 @@ hooks = [
 repo = "local"
 hooks = [
     # pre-commit: fast checks, only for the areas the commit touches.
-    { id = "cargo-fmt", name = "cargo fmt", language = "system", stages = ["pre-commit"], files = '^(backend/|rust-toolchain\.toml$)', pass_filenames = false, entry = "cargo fmt --manifest-path backend/Cargo.toml --all --check" },
-    { id = "clippy", name = "cargo clippy", language = "system", stages = ["pre-commit"], files = '^(backend/|rust-toolchain\.toml$)', pass_filenames = false, entry = "cargo clippy --manifest-path backend/Cargo.toml --workspace --all-targets -- -D warnings" },
+    { id = "cargo-fmt", name = "cargo fmt", language = "system", stages = ["pre-commit"], files = '^(crates/|(Cargo|clippy|rustfmt|rust-toolchain)\.(toml|lock)$)', pass_filenames = false, entry = "cargo fmt --all --check" },
+    { id = "clippy", name = "cargo clippy", language = "system", stages = ["pre-commit"], files = '^(crates/|(Cargo|clippy|rustfmt|rust-toolchain)\.(toml|lock)$)', pass_filenames = false, entry = "cargo clippy --workspace --all-targets -- -D warnings" },
 
     { id = "conventional-commit", name = "Conventional Commits subject", language = "script", stages = ["commit-msg"], entry = "scripts/hooks/commit-msg.sh" },
 
