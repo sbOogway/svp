@@ -9,8 +9,8 @@ use super::{DataClientSpec, Market};
 
 pub(super) fn symbol(market: Market, base: &str) -> String {
     match market {
-        Market::Spot => format!("{base}USDT"),
-        Market::Futures => format!("{base}USDT-PERP"),
+        Market::SPOT => format!("{base}USDT"),
+        Market::FUTURES => format!("{base}USDT-PERP"),
     }
 }
 
@@ -19,8 +19,8 @@ pub(super) fn data_client(market: Market, instrument_ids: &[InstrumentId]) -> Da
     // exchange info (~500 symbols) and warns for every non-trading one.
     let config = BinanceDataClientConfig {
         product_type: match market {
-            Market::Spot => BinanceProductType::Spot,
-            Market::Futures => BinanceProductType::UsdM,
+            Market::SPOT => BinanceProductType::Spot,
+            Market::FUTURES => BinanceProductType::UsdM,
         },
         environment: BinanceEnvironment::Live,
         // SBE (the default) requires Ed25519 keys; ignored off spot.

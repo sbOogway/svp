@@ -13,13 +13,13 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "svp starting");
 
     let feeds = FeedsBuilder::new()
-        .add_venue(Venue::Binance)
-        .add_venue(Venue::Bybit)
-        .add_venue(Venue::Okx)
-        .add_venue(Venue::Kraken)
-        .add_venue(Venue::Hyperliquid)
-        .add_market(Market::Futures)
-        .add_instrument(Coin::Btc)
+        .add_venue(Venue::BINANCE)
+        .add_venue(Venue::BYBIT)
+        .add_venue(Venue::OKX)
+        .add_venue(Venue::KRAKEN)
+        .add_venue(Venue::HYPERLIQUID)
+        .add_market(Market::FUTURES)
+        .add_instrument(Coin::BTC)
         .build()?;
 
     let mut node = svp_core::node::build(&feeds)?;
