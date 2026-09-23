@@ -1,5 +1,3 @@
-//! Data actors that run inside the Nautilus node.
-
 use nautilus_common::{
     actor::{DataActor, DataActorCore, data_actor::DataActorConfig},
     nautilus_actor,
@@ -8,9 +6,8 @@ use nautilus_model::data::TradeTick;
 
 use crate::venue::Subscription;
 
-/// Minimal actor: subscribes to the trade stream of each subscription and logs
-/// every trade. Exists to prove the node connects and data flows; the
-/// aggregation actor (`SvpActor`) supersedes it.
+/// Exists to prove the node connects and data flows; the aggregation actor
+/// (`SvpActor`) supersedes it.
 #[derive(Debug)]
 pub struct TradeLogger {
     core: DataActorCore,
@@ -21,7 +18,6 @@ pub struct TradeLogger {
 nautilus_actor!(TradeLogger);
 
 impl TradeLogger {
-    /// Creates a logger for the given subscriptions.
     #[must_use]
     pub fn new(subscriptions: Vec<Subscription>) -> Self {
         Self {

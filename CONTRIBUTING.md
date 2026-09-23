@@ -11,5 +11,9 @@
    CI never builds: it checks formatting, lints, types, tests and audits only.
    Do not add `build` (or any release build) to `ci` or to the hooks; run
    `make build` by hand when you need the artifacts.
-6. Open a PR with the template; rebase-merge into `main` (the only merge method
+6. Don't overcomment. A comment must say something the code can't: why, a
+   constraint, a non-obvious consequence. No comment that restates a name or a
+   signature (`/// Spot.` on `Spot`, `/// Adds a venue.` on `add_venue`). Docs
+   are not required on public items: clippy is set up not to ask for them.
+7. Open a PR with the template; rebase-merge into `main` (the only merge method
    enabled). Every commit lands on `main` as-is, so keep each one meaningful.

@@ -1,12 +1,10 @@
-//! OKX: USDT spot and USDT perpetual swaps (`BTC-USD-SWAP` is inverse).
-//! Public streams only, no API keys.
-
 use nautilus_okx::{
     common::enums::OKXInstrumentType, config::OKXDataClientConfig, factories::OKXDataClientFactory,
 };
 
 use super::{DataClientSpec, Market};
 
+// USDT, not USD: `BTC-USD-SWAP` is an inverse contract.
 pub(super) fn symbol(market: Market, base: &str) -> String {
     match market {
         Market::Spot => format!("{base}-USDT"),

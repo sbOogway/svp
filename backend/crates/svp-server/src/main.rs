@@ -1,5 +1,3 @@
-//! svp backend binary. Populated in milestones M1 and M2.
-
 use svp_core::venue::{Coin, FeedsBuilder, Market, Venue};
 use tracing_subscriber::EnvFilter;
 

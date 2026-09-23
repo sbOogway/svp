@@ -1,6 +1,3 @@
-//! Hyperliquid: USD perpetuals; spot is not mapped. One client serves every
-//! market. Public streams only, no private key.
-
 use nautilus_hyperliquid::{
     config::HyperliquidDataClientConfig, factories::HyperliquidDataClientFactory,
 };
