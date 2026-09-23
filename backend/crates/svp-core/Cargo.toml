@@ -13,9 +13,13 @@ svp-protocol = { workspace = true }
 anyhow = { workspace = true }
 log = { workspace = true }
 nautilus-binance = { workspace = true }
+nautilus-bybit = { workspace = true }
 nautilus-common = { workspace = true }
+nautilus-hyperliquid = { workspace = true }
+nautilus-kraken = { workspace = true }
 nautilus-live = { workspace = true }
 nautilus-model = { workspace = true }
+nautilus-okx = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 
