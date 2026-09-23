@@ -18,12 +18,12 @@ backend/    Cargo workspace
   crates/svp-server     axum REST + WebSocket server, serves the frontend, binary `svp`
 frontend/   Vite + React + TypeScript, KLineChart
 scripts/    setup and deploy
-.githooks/  local CI (there is no hosted CI, by design)
+prek.toml   git hooks = local CI (there is no hosted CI, by design)
 ```
 
 ## Getting started
 
-Requirements: [rustup](https://rustup.rs) (toolchain pinned in `rust-toolchain.toml`), Node ≥ 22.
+Requirements: [rustup](https://rustup.rs) (toolchain pinned in `rust-toolchain.toml`), Node ≥ 22, [prek](https://prek.j178.dev/installation/).
 
 ```sh
 ./scripts/setup.sh     # installs git hooks + frontend deps
