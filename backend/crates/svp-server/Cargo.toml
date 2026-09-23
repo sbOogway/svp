@@ -1,6 +1,6 @@
 [package]
 name = "svp-server"
-description = "svp backend binary: REST + WebSocket server and optional static frontend"
+description = "svp server binary: REST + WebSocket server"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

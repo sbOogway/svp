@@ -3,8 +3,7 @@
 A monolithic crypto market-data platform: a Rust backend built on
 [NautilusTrader](https://nautilustrader.io) subscribes to the trade streams of
 many exchanges, aggregates them into enriched candles (buy/sell volume, delta,
-VWAP…), and streams them over WebSocket to a TypeScript frontend built on
-[KLineChart](https://klinecharts.com).
+VWAP…), and streams them over WebSocket to a native [Iced](https://iced.rs) app.
 
 Status: **M1 — multi-venue trade-driven aggregation**. See the [milestones](https://github.com/sbOogway/svp/milestones)
 and the [architecture decisions](https://github.com/sbOogway/svp/wiki/Architecture) in the wiki.
@@ -13,25 +12,22 @@ and the [architecture decisions](https://github.com/sbOogway/svp/wiki/Architectu
 
 ```
 backend/    Cargo workspace
-  crates/svp-protocol   wire types shared with the frontend (TS generated via ts-rs)
+  crates/svp-protocol   wire types shared by the server and the app
   crates/svp-core       Nautilus live node, aggregation actor, broadcast bridge
-  crates/svp-server     axum REST + WebSocket server, serves the frontend, binary `svp`
-frontend/   Vite + React + TypeScript, KLineChart
-scripts/    setup and deploy
+  crates/svp-server     axum REST + WebSocket server, binary `svp`
+scripts/    setup and git hooks
 prek.toml   git hooks = local CI (there is no hosted CI, by design)
 ```
 
 ## Getting started
 
-Requirements: [rustup](https://rustup.rs) (toolchain pinned in `rust-toolchain.toml`), Node ≥ 22, [prek](https://prek.j178.dev/installation/).
+Requirements: [rustup](https://rustup.rs) (toolchain pinned in `rust-toolchain.toml`), [prek](https://prek.j178.dev/installation/).
 
 ```sh
-./scripts/setup.sh     # installs git hooks + frontend deps
-make ci-fast           # fmt, clippy, typecheck, lint  (what pre-commit runs)
-make ci                # + tests, audit, release build  (what pre-push runs)
-make deploy-pages      # publish frontend to GitHub Pages (post-merge does this on main)
+./scripts/setup.sh     # installs git hooks
+make ci-fast           # fmt, clippy
+make ci                # + tests, audit  (what pre-push runs)
 cd backend && cargo run   # connects to Binance USD-M and logs BTCUSDT-PERP trades
-cd frontend && npm run dev
 ```
 
 Logging: Nautilus components log through the `log` crate, configured with

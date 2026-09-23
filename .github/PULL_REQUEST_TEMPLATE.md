@@ -8,4 +8,3 @@ Closes #
 
 - [ ] `make ci` passes locally (pre-push enforces it)
 - [ ] [Architecture](https://github.com/sbOogway/svp/wiki/Architecture) wiki page updated if a decision changed
-- [ ] protocol change → TypeScript types regenerated

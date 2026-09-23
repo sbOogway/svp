@@ -1,9 +1,6 @@
 # Rust
 backend/target/
 target/
-# Node
-node_modules/
-frontend/dist/
 # Secrets & local config
 .env
 .env.*

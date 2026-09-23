@@ -21,15 +21,12 @@ hooks = [
     # pre-commit: fast checks, only for the areas the commit touches.
     { id = "cargo-fmt", name = "cargo fmt", language = "system", stages = ["pre-commit"], files = '^(backend/|rust-toolchain\.toml$)', pass_filenames = false, entry = "cargo fmt --manifest-path backend/Cargo.toml --all --check" },
     { id = "clippy", name = "cargo clippy", language = "system", stages = ["pre-commit"], files = '^(backend/|rust-toolchain\.toml$)', pass_filenames = false, entry = "cargo clippy --manifest-path backend/Cargo.toml --workspace --all-targets -- -D warnings" },
-    { id = "tsc", name = "frontend typecheck", language = "system", stages = ["pre-commit"], files = '^frontend/', pass_filenames = false, entry = "npm --prefix frontend run typecheck" },
-    { id = "oxlint", name = "frontend lint", language = "system", stages = ["pre-commit"], files = '^frontend/', pass_filenames = false, entry = "npm --prefix frontend run lint" },
 
     { id = "conventional-commit", name = "Conventional Commits subject", language = "script", stages = ["commit-msg"], entry = "scripts/hooks/commit-msg.sh" },
 
     # pre-push: full CI; skipped when the push changes no files (branch deletion).
     { id = "ci", name = "make ci", language = "system", stages = ["pre-push"], pass_filenames = false, require_serial = true, entry = "make ci" },
 
-    # post-merge: main only moves by pulling merged PRs. Runs in this order.
+    # post-merge: main only moves by pulling merged PRs.
     { id = "prune-merged-branches", name = "delete merged branches", language = "script", stages = ["post-merge"], always_run = true, pass_filenames = false, verbose = true, entry = "scripts/hooks/prune-merged-branches.sh" },
-    { id = "publish-pages", name = "publish Pages if frontend changed", language = "script", stages = ["post-merge"], always_run = true, pass_filenames = false, verbose = true, entry = "scripts/hooks/publish-pages-if-changed.sh" },
 ]

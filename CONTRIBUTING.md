@@ -6,9 +6,9 @@
 3. Branch from `main`: `<type>/<short-name>` (e.g. `feat/bar-accumulator`).
 4. Commits follow [Conventional Commits](https://www.conventionalcommits.org):
    `feat(core): …`, `fix(server): …`, `docs: …`. Scopes: `protocol`, `core`,
-   `server`, `frontend`, `infra`, `docs`.
+   `server`, `app`, `infra`, `docs`.
 5. `make ci` must pass locally — the `pre-push` hook enforces it. There is no hosted CI.
-   CI never builds: it checks formatting, lints, types, tests and audits only.
+   CI never builds: it checks formatting, lints, tests and audits only.
    Do not add `build` (or any release build) to `ci` or to the hooks; run
    `make build` by hand when you need the artifacts.
 6. Don't overcomment. A comment must say something the code can't: why, a
