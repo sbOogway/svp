@@ -3052,6 +3052,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "nautilus-coinbase"
+version = "0.64.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a47cf730cd17a78849db817b0b867f133db47a5232ed81c487cc49940c4f44e"
+dependencies = [
+ "ahash",
+ "anyhow",
+ "arc-swap",
+ "async-trait",
+ "aws-lc-rs",
+ "base64 0.23.1",
+ "bon",
+ "futures-util",
+ "jiff",
+ "log",
+ "nautilus-common",
+ "nautilus-core",
+ "nautilus-live",
+ "nautilus-model",
+ "nautilus-network",
+ "parking_lot",
+ "pem",
+ "rust_decimal",
+ "rust_decimal_macros",
+ "serde",
+ "serde_json",
+ "strum",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "url",
+ "ustr",
+ "zeroize",
+]
+
+[[package]]
 name = "nautilus-common"
 version = "0.64.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4814,6 +4851,7 @@ dependencies = [
  "log",
  "nautilus-binance",
  "nautilus-bybit",
+ "nautilus-coinbase",
  "nautilus-common",
  "nautilus-hyperliquid",
  "nautilus-kraken",

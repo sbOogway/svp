@@ -31,6 +31,9 @@ impl DataActor for TradeLogger {
         // Route by client, not by venue: one venue can have several clients
         // (Binance spot and futures), none of them named after the venue.
         for sub in self.subscriptions.clone() {
+            // Some clients load only part of their venue's instruments on
+            // connect (Coinbase: spot only) and drop trades for the rest.
+            self.request_instrument(sub.instrument_id, None, None, Some(sub.client_id), None)?;
             log::info!(
                 "subscribing to trades for {} on {}",
                 sub.instrument_id,

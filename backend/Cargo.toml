@@ -19,6 +19,7 @@ log = "0.4"
 # Nautilus is pinned exactly: its Rust API changes between the ~biweekly releases.
 nautilus-binance = "=0.64.0"
 nautilus-bybit = "=0.64.0"
+nautilus-coinbase = "=0.64.0"
 nautilus-common = "=0.64.0"
 nautilus-hyperliquid = "=0.64.0"
 nautilus-kraken = "=0.64.0"

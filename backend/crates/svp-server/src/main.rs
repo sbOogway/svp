@@ -17,6 +17,7 @@ async fn main() -> anyhow::Result<()> {
         .add_venue(Venue::Bybit)
         .add_venue(Venue::Okx)
         .add_venue(Venue::Kraken)
+        .add_venue(Venue::Coinbase)
         .add_venue(Venue::Hyperliquid)
         .add_market(Market::Futures)
         .add_instrument(Coin::BTC)
