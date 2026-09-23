@@ -7,16 +7,16 @@ use super::{DataClientSpec, Market};
 // USDT, not USD: `BTC-USD-SWAP` is an inverse contract.
 pub(super) fn symbol(market: Market, base: &str) -> String {
     match market {
-        Market::Spot => format!("{base}-USDT"),
-        Market::Futures => format!("{base}-USDT-SWAP"),
+        Market::SPOT => format!("{base}-USDT"),
+        Market::FUTURES => format!("{base}-USDT-SWAP"),
     }
 }
 
 pub(super) fn data_client(market: Market) -> DataClientSpec {
     let config = OKXDataClientConfig {
         instrument_types: vec![match market {
-            Market::Spot => OKXInstrumentType::Spot,
-            Market::Futures => OKXInstrumentType::Swap,
+            Market::SPOT => OKXInstrumentType::Spot,
+            Market::FUTURES => OKXInstrumentType::Swap,
         }],
         ..Default::default()
     };

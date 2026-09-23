@@ -6,8 +6,8 @@ use super::{DataClientSpec, Market};
 
 pub(super) fn symbol(market: Market, base: &str) -> Option<String> {
     match market {
-        Market::Spot => None,
-        Market::Futures => Some(format!("{base}-USD-PERP")),
+        Market::SPOT => None,
+        Market::FUTURES => Some(format!("{base}-USD-PERP")),
     }
 }
 

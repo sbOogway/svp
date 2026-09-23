@@ -7,8 +7,8 @@ use super::{DataClientSpec, Market};
 
 pub(super) fn symbol(market: Market, base: &str) -> String {
     match market {
-        Market::Spot => format!("{base}/USD"),
-        Market::Futures => {
+        Market::SPOT => format!("{base}/USD"),
+        Market::FUTURES => {
             let base = if base == "BTC" { "XBT" } else { base };
             format!("PF_{base}USD")
         }
@@ -18,8 +18,8 @@ pub(super) fn symbol(market: Market, base: &str) -> String {
 pub(super) fn data_client(market: Market) -> DataClientSpec {
     let config = KrakenDataClientConfig {
         product_type: match market {
-            Market::Spot => KrakenProductType::Spot,
-            Market::Futures => KrakenProductType::Futures,
+            Market::SPOT => KrakenProductType::Spot,
+            Market::FUTURES => KrakenProductType::Futures,
         },
         ..Default::default()
     };
