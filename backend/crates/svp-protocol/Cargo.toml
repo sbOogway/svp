@@ -1,6 +1,6 @@
 [package]
 name = "svp-protocol"
-description = "Wire protocol shared between the svp backend and frontend"
+description = "Wire protocol shared between the svp server and app"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

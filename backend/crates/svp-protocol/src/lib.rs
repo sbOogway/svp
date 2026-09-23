@@ -1,7 +1,4 @@
-//! Wire protocol shared between the svp backend and frontend.
-//!
-//! Every message that crosses the WebSocket or REST boundary is defined here so
-//! the TypeScript types can be generated from a single source of truth.
+//! Wire protocol shared between the svp server and app.
 
 use serde::{Deserialize, Serialize};
 
