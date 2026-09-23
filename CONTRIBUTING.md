@@ -1,6 +1,7 @@
 # Contributing
 
-1. Run `./scripts/setup.sh` once per clone (installs hooks; nothing works without them).
+1. Install [prek](https://prek.j178.dev/installation/), then run `./scripts/setup.sh`
+   once per clone (installs the hooks; nothing works without them).
 2. Pick or open an issue; every PR references one and targets a milestone.
 3. Branch from `main`: `<type>/<short-name>` (e.g. `feat/bar-accumulator`).
 4. Commits follow [Conventional Commits](https://www.conventionalcommits.org):

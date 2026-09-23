@@ -1,4 +1,4 @@
-# svp — local CI. The git hooks call these targets; run them by hand any time.
+# svp — local CI. The prek hooks (prek.toml) call these targets; run them by hand any time.
 # There is intentionally no hosted CI: see the wiki, https://github.com/sbOogway/svp/wiki/Architecture#workflow
 
 .PHONY: help setup fmt lint typecheck test audit build ci ci-fast ci-clean deploy-pages
@@ -6,10 +6,11 @@
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-setup: ## One-time per clone: install git hooks and frontend deps
-	git config core.hooksPath .githooks
+setup: ## One-time per clone: install git hooks (prek) and frontend deps
+	@command -v prek >/dev/null || { echo "prek is required: https://prek.j178.dev/installation/" >&2; exit 1; }
+	git config --unset core.hooksPath || true
+	prek install --overwrite
 	cd frontend && npm ci --no-fund --no-audit
-	@echo "hooks installed (core.hooksPath=.githooks)"
 
 fmt: ## Rust formatting check
 	cd backend && cargo fmt --all --check
