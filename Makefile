@@ -1,10 +1,7 @@
 # svp — local CI. The prek hooks (prek.toml) call these targets; run them by hand any time.
 # There is intentionally no hosted CI: see the wiki, https://github.com/sbOogway/svp/wiki/Architecture#workflow
 
-.PHONY: help setup fmt lint typecheck test audit build ci ci-fast ci-clean deploy-pages
-
-help:
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+.PHONY: setup fmt lint typecheck test audit build ci ci-fast ci-clean deploy-pages
 
 setup:
 	@command -v prek >/dev/null || { echo "prek is required: https://prek.j178.dev/installation/" >&2; exit 1; }
