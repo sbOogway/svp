@@ -17,23 +17,16 @@ use std::{fmt, str::FromStr};
 use nautilus_common::factories::{ClientConfig, DataClientFactory};
 use nautilus_model::identifiers::{self, ClientId, InstrumentId, Symbol};
 
-/// A supported exchange.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Venue {
-    /// Binance.
     Binance,
-    /// Bybit.
     Bybit,
-    /// OKX.
     Okx,
-    /// Kraken.
     Kraken,
-    /// Hyperliquid.
     Hyperliquid,
 }
 
 impl Venue {
-    /// The Nautilus venue name, suffix of every instrument id on it.
     const fn name(self) -> &'static str {
         match self {
             Self::Binance => "BINANCE",
@@ -44,8 +37,6 @@ impl Venue {
         }
     }
 
-    /// The id of `coin`'s USD instrument in `market`, whatever the venue
-    /// quotes it in (USD, USDT…), or `None` if the venue has no such market.
     fn instrument_id(self, market: Market, coin: Coin) -> Option<InstrumentId> {
         let base = coin.code();
         let symbol = match self {
@@ -93,10 +84,8 @@ impl FromStr for Venue {
     }
 }
 
-/// A kind of instrument, named the same on every venue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Market {
-    /// Spot.
     Spot,
     /// Linear perpetual swaps, margined in the quote currency.
     Futures,
@@ -128,38 +117,23 @@ impl FromStr for Market {
 /// listed in both markets on every venue (Hyperliquid has no spot).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Coin {
-    /// Bitcoin.
     Btc,
-    /// Ether.
     Eth,
-    /// Solana.
     Sol,
-    /// XRP.
     Xrp,
-    /// Dogecoin.
     Doge,
-    /// BNB.
     Bnb,
-    /// Cardano.
     Ada,
-    /// Avalanche.
     Avax,
-    /// Chainlink.
     Link,
-    /// Litecoin.
     Ltc,
-    /// Polkadot.
     Dot,
-    /// TRON.
     Trx,
-    /// Sui.
     Sui,
-    /// Bitcoin Cash.
     Bch,
 }
 
 impl Coin {
-    /// Every supported coin.
     pub const ALL: [Self; 14] = [
         Self::Btc,
         Self::Eth,
@@ -177,7 +151,6 @@ impl Coin {
         Self::Bch,
     ];
 
-    /// The ticker, upper case, e.g. `BTC`.
     pub const fn code(self) -> &'static str {
         match self {
             Self::Btc => "BTC",
@@ -215,16 +188,12 @@ impl FromStr for Coin {
     }
 }
 
-/// The pair `LiveNode` needs to register a data client.
 #[derive(Debug)]
 pub struct DataClientSpec {
-    /// Builds the client when the node starts.
     pub factory: Box<dyn DataClientFactory>,
-    /// Adapter-specific configuration handed to `factory`.
     pub config: Box<dyn ClientConfig>,
 }
 
-/// One data client: a market on a venue and the instruments it serves.
 #[derive(Debug, Clone)]
 pub struct Feed {
     venue: Venue,
@@ -233,8 +202,6 @@ pub struct Feed {
 }
 
 impl Feed {
-    /// Unique name of the data client within the node, e.g. `BINANCE-FUTURES`.
-    ///
     /// Distinct from the venue: several clients can serve one venue (Binance
     /// spot and futures are both `BINANCE`), so subscriptions are routed by
     /// client, not by venue.
@@ -242,37 +209,29 @@ impl Feed {
         ClientId::from(format!("{}-{}", self.venue, self.market).as_str())
     }
 
-    /// Venue of the client.
     pub fn venue(&self) -> Venue {
         self.venue
     }
 
-    /// Market of the client.
     pub fn market(&self) -> Market {
         self.market
     }
 
-    /// Instruments to load and subscribe to on this client.
     pub fn instrument_ids(&self) -> &[InstrumentId] {
         &self.instrument_ids
     }
 
-    /// Builds the factory and configuration of the data client.
     pub fn data_client(&self) -> DataClientSpec {
         self.venue.data_client(self.market, &self.instrument_ids)
     }
 }
 
-/// One instrument on one data client.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Subscription {
-    /// Data client that serves the instrument.
     pub client_id: ClientId,
-    /// Instrument to subscribe to.
     pub instrument_id: InstrumentId,
 }
 
-/// Flattens the instruments of every feed into subscriptions.
 pub fn subscriptions(feeds: &[Feed]) -> Vec<Subscription> {
     feeds
         .iter()
@@ -302,35 +261,29 @@ pub struct FeedsBuilder {
 }
 
 impl FeedsBuilder {
-    /// Creates an empty builder.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Adds a venue.
     #[must_use]
     pub fn add_venue(mut self, venue: Venue) -> Self {
         push_unique(&mut self.venues, venue);
         self
     }
 
-    /// Adds a market.
     #[must_use]
     pub fn add_market(mut self, market: Market) -> Self {
         push_unique(&mut self.markets, market);
         self
     }
 
-    /// Adds a coin: its USD instrument on every venue.
     #[must_use]
     pub fn add_instrument(mut self, coin: Coin) -> Self {
         push_unique(&mut self.coins, coin);
         self
     }
 
-    /// Returns one feed per venue and market that lists at least one coin.
-    ///
     /// # Errors
     ///
     /// Returns an error naming every missing input (no venue, market or coin),

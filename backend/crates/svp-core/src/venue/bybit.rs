@@ -1,6 +1,3 @@
-//! Bybit: USDT spot and USDT linear perpetuals. Public streams only, no API
-//! keys.
-
 use nautilus_bybit::{
     common::enums::BybitProductType, config::BybitDataClientConfig,
     factories::BybitDataClientFactory,

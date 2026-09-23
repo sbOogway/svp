@@ -1,6 +1,3 @@
-//! Binance: USDT spot and USD-M USDT perpetuals. Public streams only, no API
-//! keys.
-
 use nautilus_binance::{
     common::enums::{BinanceEnvironment, BinanceProductType},
     config::{BinanceDataClientConfig, BinanceInstrumentProviderConfig, BinanceSpotMarketDataMode},

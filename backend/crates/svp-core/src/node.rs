@@ -1,5 +1,3 @@
-//! Construction of the Nautilus [`LiveNode`] that hosts every venue client.
-
 use nautilus_common::enums::Environment;
 use nautilus_live::node::LiveNode;
 use nautilus_model::identifiers::TraderId;
@@ -9,15 +7,8 @@ use crate::{
     venue::{self, DataClientSpec, Feed},
 };
 
-/// Builds a node with one data client per feed and a [`TradeLogger`] over the
-/// instruments of all feeds.
-///
 /// Building the node initializes Nautilus logging, which registers the global
 /// `log` logger: the caller must not have registered another one.
-///
-/// # Errors
-///
-/// Returns an error if the node or a client configuration is invalid.
 pub fn build(feeds: &[Feed]) -> anyhow::Result<LiveNode> {
     let mut builder = LiveNode::builder(TraderId::from("SVP-001"), Environment::Live)?
         .with_name("svp")

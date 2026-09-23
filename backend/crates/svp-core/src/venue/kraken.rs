@@ -1,6 +1,3 @@
-//! Kraken: USD spot and USD multi-collateral perpetuals (`PF_`, where BTC is
-//! `XBT`). Public streams only, no API keys.
-
 use nautilus_kraken::{
     common::enums::KrakenProductType, config::KrakenDataClientConfig,
     factories::KrakenDataClientFactory,
