@@ -5,12 +5,12 @@ use nautilus_hyperliquid::{
     config::HyperliquidDataClientConfig, factories::HyperliquidDataClientFactory,
 };
 
-use super::{DataClientSpec, Market, Pair};
+use super::{DataClientSpec, Market};
 
-pub(super) fn symbol(market: Market, pair: &Pair) -> Option<String> {
+pub(super) fn symbol(market: Market, base: &str) -> Option<String> {
     match market {
-        Market::Futures if pair.quote() == "USD" => Some(format!("{}-USD-PERP", pair.base())),
-        Market::Spot | Market::Futures => None,
+        Market::Spot => None,
+        Market::Futures => Some(format!("{base}-USD-PERP")),
     }
 }
 

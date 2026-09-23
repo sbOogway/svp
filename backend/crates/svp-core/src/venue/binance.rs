@@ -1,5 +1,5 @@
-//! Binance: spot and USD-M perpetuals (USDT or USDC margined). Public streams
-//! only, no API keys.
+//! Binance: USDT spot and USD-M USDT perpetuals. Public streams only, no API
+//! keys.
 
 use nautilus_binance::{
     common::enums::{BinanceEnvironment, BinanceProductType},
@@ -8,14 +8,12 @@ use nautilus_binance::{
 };
 use nautilus_model::identifiers::InstrumentId;
 
-use super::{DataClientSpec, Market, Pair};
+use super::{DataClientSpec, Market};
 
-pub(super) fn symbol(market: Market, pair: &Pair) -> Option<String> {
-    let (base, quote) = (pair.base(), pair.quote());
+pub(super) fn symbol(market: Market, base: &str) -> String {
     match market {
-        Market::Spot => Some(format!("{base}{quote}")),
-        Market::Futures if matches!(quote, "USDT" | "USDC") => Some(format!("{base}{quote}-PERP")),
-        Market::Futures => None,
+        Market::Spot => format!("{base}USDT"),
+        Market::Futures => format!("{base}USDT-PERP"),
     }
 }
 
