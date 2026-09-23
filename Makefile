@@ -9,24 +9,24 @@ setup:
 	prek install --overwrite
 
 fmt: 
-	cd backend && cargo fmt --all --check
+	cargo fmt --all --check
 
 lint: 
-	cd backend && cargo clippy --workspace --all-targets -- -D warnings
+	cargo clippy --workspace --all-targets -- -D warnings
 
 test:
-	cd backend && cargo test --workspace
+	cargo test --workspace
 
 audit:
-	@if command -v cargo-audit >/dev/null; then cd backend && cargo audit; else echo "cargo-audit not installed: cargo install cargo-audit --locked"; fi
+	@if command -v cargo-audit >/dev/null; then cargo audit; else echo "cargo-audit not installed: cargo install cargo-audit --locked"; fi
 
 build:
-	cd backend && cargo build --workspace --release
+	cargo build --workspace --release
 
 ci-fast: fmt lint
 
 ci: ci-fast test audit
 
 ci-clean: 
-	cd backend && cargo clean
+	cargo clean
 	$(MAKE) setup ci

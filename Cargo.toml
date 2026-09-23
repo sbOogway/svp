@@ -11,8 +11,8 @@ repository = "https://github.com/sbOogway/svp"
 authors = ["Mattia Papaccioli (sbOogway)"]
 
 [workspace.dependencies]
-svp-protocol = { path = "crates/svp-protocol" }
-svp-core = { path = "crates/svp-core" }
+svp-protocol = { path = "crates/protocol" }
+svp-core = { path = "crates/core" }
 
 anyhow = "1"
 log = "0.4"

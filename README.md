@@ -1,6 +1,6 @@
 # svp — sbOogway's volumetric platform
 
-A monolithic crypto market-data platform: a Rust backend built on
+A monolithic crypto market-data platform: a Rust server built on
 [NautilusTrader](https://nautilustrader.io) subscribes to the trade streams of
 many exchanges, aggregates them into enriched candles (buy/sell volume, delta,
 VWAP…), and streams them over WebSocket to a native [Iced](https://iced.rs) app.
@@ -11,12 +11,11 @@ and the [architecture decisions](https://github.com/sbOogway/svp/wiki/Architectu
 ## Layout
 
 ```
-backend/    Cargo workspace
-  crates/svp-protocol   wire types shared by the server and the app
-  crates/svp-core       Nautilus live node, aggregation actor, broadcast bridge
-  crates/svp-server     axum REST + WebSocket server, binary `svp`
-scripts/    setup and git hooks
-prek.toml   git hooks = local CI (there is no hosted CI, by design)
+crates/protocol   wire types shared by the server and the app
+crates/core       Nautilus live node, aggregation actor, broadcast bridge
+crates/server     axum REST + WebSocket server, binary `svp`
+scripts/          setup and git hooks
+prek.toml         git hooks = local CI (there is no hosted CI, by design)
 ```
 
 ## Getting started
@@ -27,7 +26,7 @@ Requirements: [rustup](https://rustup.rs) (toolchain pinned in `rust-toolchain.t
 ./scripts/setup.sh     # installs git hooks
 make ci-fast           # fmt, clippy
 make ci                # + tests, audit  (what pre-push runs)
-cd backend && cargo run   # connects to Binance USD-M and logs BTCUSDT-PERP trades
+cargo run              # streams BTC futures trades from every venue and logs them
 ```
 
 Logging: Nautilus components log through the `log` crate, configured with
