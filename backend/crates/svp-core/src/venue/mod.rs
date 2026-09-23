@@ -8,6 +8,7 @@
 
 mod binance;
 mod bybit;
+mod coinbase;
 mod hyperliquid;
 mod kraken;
 mod okx;
@@ -74,6 +75,7 @@ named_enum! {
         Bybit = "BYBIT",
         Okx = "OKX",
         Kraken = "KRAKEN",
+        Coinbase = "COINBASE",
         Hyperliquid = "HYPERLIQUID",
     }
 }
@@ -85,6 +87,7 @@ impl Venue {
             Self::Bybit => &bybit::Bybit,
             Self::Okx => &okx::Okx,
             Self::Kraken => &kraken::Kraken,
+            Self::Coinbase => &coinbase::Coinbase,
             Self::Hyperliquid => &hyperliquid::Hyperliquid,
         }
     }
@@ -108,8 +111,9 @@ named_enum! {
 
 named_enum! {
     /// Every venue quotes a coin against its own USD currency: USDT on Binance,
-    /// Bybit and OKX, USD on Kraken and Hyperliquid. Each one is listed in both
-    /// markets on every venue (Hyperliquid has no spot).
+    /// Bybit and OKX, USD on Kraken, Coinbase and Hyperliquid. Each one is
+    /// listed in both markets on every venue, except that Hyperliquid has no
+    /// spot and Coinbase has no TRX.
     pub enum Coin {
         BTC, ETH, SOL, XRP, DOGE, BNB, ADA, AVAX, LINK, LTC, DOT, TRX, SUI, BCH,
     }
@@ -286,9 +290,9 @@ mod tests {
 
     #[test]
     fn maps_a_coin_to_each_venue_usd_instrument() {
-        use Coin::{BTC, DOGE, ETH};
+        use Coin::{BTC, DOGE, ETH, TRX};
         use Market::{Futures, Spot};
-        use Venue::{Binance, Bybit, Hyperliquid, Kraken, Okx};
+        use Venue::{Binance, Bybit, Coinbase, Hyperliquid, Kraken, Okx};
         let cases = [
             (Binance, Spot, BTC, Some("BTCUSDT.BINANCE")),
             (Binance, Futures, BTC, Some("BTCUSDT-PERP.BINANCE")),
@@ -301,6 +305,10 @@ mod tests {
             (Kraken, Futures, ETH, Some("PF_ETHUSD.KRAKEN")),
             (Kraken, Spot, DOGE, Some("DOGE/USD.KRAKEN")),
             (Kraken, Futures, DOGE, Some("PF_DOGEUSD.KRAKEN")),
+            (Coinbase, Spot, BTC, Some("BTC-USD.COINBASE")),
+            (Coinbase, Futures, BTC, Some("BIP-20DEC30-CDE.COINBASE")),
+            (Coinbase, Spot, TRX, None),
+            (Coinbase, Futures, TRX, None),
             (Hyperliquid, Spot, BTC, None),
             (Hyperliquid, Futures, BTC, Some("BTC-USD-PERP.HYPERLIQUID")),
         ];
@@ -314,12 +322,16 @@ mod tests {
     }
 
     #[test]
-    fn every_coin_is_listed_on_every_venue() {
+    fn lists_every_coin_except_documented_gaps() {
         for &venue in Venue::ALL {
             for &market in Market::ALL {
                 for &coin in Coin::ALL {
                     let listed = id(venue, market, coin).is_some();
-                    let expected = !(venue == Venue::Hyperliquid && market == Market::Spot);
+                    let expected = match venue {
+                        Venue::Hyperliquid => market == Market::Futures,
+                        Venue::Coinbase => coin != Coin::TRX,
+                        _ => true,
+                    };
                     assert_eq!(listed, expected, "{venue} {market} {coin}");
                 }
             }
