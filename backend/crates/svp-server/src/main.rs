@@ -1,6 +1,6 @@
 //! svp backend binary. Populated in milestones M1 and M2.
 
-use svp_core::venue::{FeedsBuilder, Market, Venue};
+use svp_core::venue::{Coin, FeedsBuilder, Market, Venue};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
         .add_venue(Venue::Kraken)
         .add_venue(Venue::Hyperliquid)
         .add_market(Market::Futures)
-        .add_instrument("btc")
+        .add_instrument(Coin::Btc)
         .build()?;
 
     let mut node = svp_core::node::build(&feeds)?;

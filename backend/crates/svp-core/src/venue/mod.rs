@@ -1,10 +1,10 @@
-//! Venues, markets and assets, and how they map onto Nautilus data clients.
+//! Venues, markets and coins, and how they map onto Nautilus data clients.
 //!
-//! A [`FeedsBuilder`] takes venues, markets and assets separately and combines
+//! A [`FeedsBuilder`] takes venues, markets and coins separately and combines
 //! them: one [`Feed`] (data client) per venue and market, subscribed to the
-//! USD instrument of every asset that venue lists in that market. Adding a
-//! venue means adding a [`Venue`] variant and a module that spells an asset's
-//! USD instrument in each market and configures the adapter.
+//! USD instrument of every coin in that market. Adding a venue means adding a
+//! [`Venue`] variant and a module that spells a coin's USD instrument in each
+//! market and configures the adapter.
 
 mod binance;
 mod bybit;
@@ -44,10 +44,10 @@ impl Venue {
         }
     }
 
-    /// The id of `asset`'s USD instrument in `market`, whatever the venue
+    /// The id of `coin`'s USD instrument in `market`, whatever the venue
     /// quotes it in (USD, USDT…), or `None` if the venue has no such market.
-    fn instrument_id(self, market: Market, asset: &Asset) -> Option<InstrumentId> {
-        let base = asset.as_str();
+    fn instrument_id(self, market: Market, coin: Coin) -> Option<InstrumentId> {
+        let base = coin.code();
         let symbol = match self {
             Self::Binance => Some(binance::symbol(market, base)),
             Self::Bybit => Some(bybit::symbol(market, base)),
@@ -123,33 +123,95 @@ impl FromStr for Market {
     }
 }
 
-/// A base asset, e.g. `btc`. Every venue quotes it against its own USD
-/// currency: USDT on Binance, Bybit and OKX, USD on Kraken and Hyperliquid.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Asset(String);
+/// A supported coin. Every venue quotes it against its own USD currency:
+/// USDT on Binance, Bybit and OKX, USD on Kraken and Hyperliquid. Each one is
+/// listed in both markets on every venue (Hyperliquid has no spot).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Coin {
+    /// Bitcoin.
+    Btc,
+    /// Ether.
+    Eth,
+    /// Solana.
+    Sol,
+    /// XRP.
+    Xrp,
+    /// Dogecoin.
+    Doge,
+    /// BNB.
+    Bnb,
+    /// Cardano.
+    Ada,
+    /// Avalanche.
+    Avax,
+    /// Chainlink.
+    Link,
+    /// Litecoin.
+    Ltc,
+    /// Polkadot.
+    Dot,
+    /// TRON.
+    Trx,
+    /// Sui.
+    Sui,
+    /// Bitcoin Cash.
+    Bch,
+}
 
-impl Asset {
-    /// The asset code, upper case.
-    pub fn as_str(&self) -> &str {
-        &self.0
+impl Coin {
+    /// Every supported coin.
+    pub const ALL: [Self; 14] = [
+        Self::Btc,
+        Self::Eth,
+        Self::Sol,
+        Self::Xrp,
+        Self::Doge,
+        Self::Bnb,
+        Self::Ada,
+        Self::Avax,
+        Self::Link,
+        Self::Ltc,
+        Self::Dot,
+        Self::Trx,
+        Self::Sui,
+        Self::Bch,
+    ];
+
+    /// The ticker, upper case, e.g. `BTC`.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Btc => "BTC",
+            Self::Eth => "ETH",
+            Self::Sol => "SOL",
+            Self::Xrp => "XRP",
+            Self::Doge => "DOGE",
+            Self::Bnb => "BNB",
+            Self::Ada => "ADA",
+            Self::Avax => "AVAX",
+            Self::Link => "LINK",
+            Self::Ltc => "LTC",
+            Self::Dot => "DOT",
+            Self::Trx => "TRX",
+            Self::Sui => "SUI",
+            Self::Bch => "BCH",
+        }
     }
 }
 
-impl fmt::Display for Asset {
+impl fmt::Display for Coin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0.to_ascii_lowercase())
+        f.write_str(&self.code().to_ascii_lowercase())
     }
 }
 
-impl FromStr for Asset {
+impl FromStr for Coin {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> anyhow::Result<Self> {
-        anyhow::ensure!(
-            !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric()),
-            "invalid asset {s:?}, expected a code such as btc"
-        );
-        Ok(Self(s.to_ascii_uppercase()))
+        Self::ALL
+            .into_iter()
+            .find(|coin| coin.code().eq_ignore_ascii_case(s))
+            .ok_or_else(|| anyhow::anyhow!("unsupported coin {s:?}"))
     }
 }
 
@@ -226,18 +288,17 @@ pub fn subscriptions(feeds: &[Feed]) -> Vec<Subscription> {
         .collect()
 }
 
-/// Combines venues, markets and assets into feeds.
+/// Combines venues, markets and coins into feeds.
 ///
-/// Every venue is paired with every market and every asset. A market the
+/// Every venue is paired with every market and every coin. A market the
 /// venue does not have (e.g. Hyperliquid spot) is logged and skipped, so
 /// adding a venue never breaks the others. Adding the same venue, market or
-/// asset twice has no effect.
+/// coin twice has no effect.
 #[derive(Debug, Default)]
 pub struct FeedsBuilder {
     venues: Vec<Venue>,
     markets: Vec<Market>,
-    assets: Vec<Asset>,
-    errors: Vec<String>,
+    coins: Vec<Coin>,
 }
 
 impl FeedsBuilder {
@@ -261,40 +322,35 @@ impl FeedsBuilder {
         self
     }
 
-    /// Adds an asset, e.g. `btc`: its USD instrument on every venue. A
-    /// malformed asset is reported by [`build`](Self::build).
+    /// Adds a coin: its USD instrument on every venue.
     #[must_use]
-    pub fn add_instrument(mut self, asset: &str) -> Self {
-        match asset.parse() {
-            Ok(asset) => push_unique(&mut self.assets, asset),
-            Err(e) => self.errors.push(e.to_string()),
-        }
+    pub fn add_instrument(mut self, coin: Coin) -> Self {
+        push_unique(&mut self.coins, coin);
         self
     }
 
-    /// Returns one feed per venue and market that lists at least one asset.
+    /// Returns one feed per venue and market that lists at least one coin.
     ///
     /// # Errors
     ///
-    /// Returns every problem found: a malformed asset, no venue, market or
-    /// asset, or no combination listed on any venue.
+    /// Returns an error naming every missing input (no venue, market or coin),
+    /// or if no venue has any of the added markets.
     pub fn build(self) -> anyhow::Result<Vec<Feed>> {
         let Self {
             venues,
             markets,
-            assets,
-            mut errors,
+            coins,
         } = self;
 
-        for (what, empty) in [
+        let errors: Vec<_> = [
             ("venue", venues.is_empty()),
             ("market", markets.is_empty()),
-            ("instrument", assets.is_empty()),
-        ] {
-            if empty {
-                errors.push(format!("no {what} added"));
-            }
-        }
+            ("instrument", coins.is_empty()),
+        ]
+        .into_iter()
+        .filter(|&(_, empty)| empty)
+        .map(|(what, _)| format!("no {what} added"))
+        .collect();
         anyhow::ensure!(
             errors.is_empty(),
             "invalid feeds:\n  {}",
@@ -304,12 +360,12 @@ impl FeedsBuilder {
         let mut feeds = Vec::new();
         for &venue in &venues {
             for &market in &markets {
-                let instrument_ids: Vec<_> = assets
+                let instrument_ids: Vec<_> = coins
                     .iter()
-                    .filter_map(|asset| {
-                        let id = venue.instrument_id(market, asset);
+                    .filter_map(|&coin| {
+                        let id = venue.instrument_id(market, coin);
                         if id.is_none() {
-                            tracing::info!(%venue, %market, %asset, "not listed, skipped");
+                            tracing::info!(%venue, %market, %coin, "not listed, skipped");
                         }
                         id
                     })
@@ -350,52 +406,61 @@ mod tests {
         Venue::Hyperliquid,
     ];
 
-    fn id(venue: Venue, market: Market, asset: &str) -> Option<String> {
-        venue
-            .instrument_id(market, &asset.parse().unwrap())
-            .map(|id| id.to_string())
+    fn id(venue: Venue, market: Market, coin: Coin) -> Option<String> {
+        venue.instrument_id(market, coin).map(|id| id.to_string())
     }
 
     #[test]
-    fn maps_an_asset_to_each_venue_usd_instrument() {
+    fn maps_a_coin_to_each_venue_usd_instrument() {
+        use Coin::{Btc, Doge, Eth};
         use Market::{Futures, Spot};
         use Venue::{Binance, Bybit, Hyperliquid, Kraken, Okx};
         let cases = [
-            (Binance, Spot, "btc", Some("BTCUSDT.BINANCE")),
-            (Binance, Futures, "btc", Some("BTCUSDT-PERP.BINANCE")),
-            (Bybit, Spot, "btc", Some("BTCUSDT-SPOT.BYBIT")),
-            (Bybit, Futures, "btc", Some("BTCUSDT-LINEAR.BYBIT")),
-            (Okx, Spot, "btc", Some("BTC-USDT.OKX")),
-            (Okx, Futures, "btc", Some("BTC-USDT-SWAP.OKX")),
-            (Kraken, Spot, "btc", Some("BTC/USD.KRAKEN")),
-            (Kraken, Futures, "btc", Some("PF_XBTUSD.KRAKEN")),
-            (Kraken, Futures, "eth", Some("PF_ETHUSD.KRAKEN")),
-            (Hyperliquid, Spot, "btc", None),
-            (
-                Hyperliquid,
-                Futures,
-                "btc",
-                Some("BTC-USD-PERP.HYPERLIQUID"),
-            ),
+            (Binance, Spot, Btc, Some("BTCUSDT.BINANCE")),
+            (Binance, Futures, Btc, Some("BTCUSDT-PERP.BINANCE")),
+            (Bybit, Spot, Btc, Some("BTCUSDT-SPOT.BYBIT")),
+            (Bybit, Futures, Btc, Some("BTCUSDT-LINEAR.BYBIT")),
+            (Okx, Spot, Btc, Some("BTC-USDT.OKX")),
+            (Okx, Futures, Btc, Some("BTC-USDT-SWAP.OKX")),
+            (Kraken, Spot, Btc, Some("BTC/USD.KRAKEN")),
+            (Kraken, Futures, Btc, Some("PF_XBTUSD.KRAKEN")),
+            (Kraken, Futures, Eth, Some("PF_ETHUSD.KRAKEN")),
+            (Kraken, Spot, Doge, Some("DOGE/USD.KRAKEN")),
+            (Kraken, Futures, Doge, Some("PF_DOGEUSD.KRAKEN")),
+            (Hyperliquid, Spot, Btc, None),
+            (Hyperliquid, Futures, Btc, Some("BTC-USD-PERP.HYPERLIQUID")),
         ];
-        for (venue, market, asset, expected) in cases {
+        for (venue, market, coin, expected) in cases {
             assert_eq!(
-                id(venue, market, asset).as_deref(),
+                id(venue, market, coin).as_deref(),
                 expected,
-                "{venue} {market} {asset}"
+                "{venue} {market} {coin}"
             );
         }
     }
 
     #[test]
-    fn combines_venues_markets_and_assets() {
+    fn every_coin_is_listed_on_every_venue() {
+        for venue in ALL_VENUES {
+            for market in [Market::Spot, Market::Futures] {
+                for coin in Coin::ALL {
+                    let listed = id(venue, market, coin).is_some();
+                    let expected = !(venue == Venue::Hyperliquid && market == Market::Spot);
+                    assert_eq!(listed, expected, "{venue} {market} {coin}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn combines_venues_markets_and_coins() {
         let feeds = FeedsBuilder::new()
             .add_venue(Venue::Binance)
             .add_venue(Venue::Bybit)
             .add_market(Market::Spot)
             .add_market(Market::Futures)
-            .add_instrument("btc")
-            .add_instrument("eth")
+            .add_instrument(Coin::Btc)
+            .add_instrument(Coin::Eth)
             .build()
             .unwrap();
         let clients: Vec<_> = feeds.iter().map(|f| f.client_id().to_string()).collect();
@@ -413,35 +478,12 @@ mod tests {
     }
 
     #[test]
-    fn one_asset_covers_every_venue_perpetual() {
-        let mut builder = FeedsBuilder::new().add_market(Market::Futures);
-        for venue in ALL_VENUES {
-            builder = builder.add_venue(venue);
-        }
-        let feeds = builder.add_instrument("btc").build().unwrap();
-        let ids: Vec<_> = feeds
-            .iter()
-            .flat_map(|f| f.instrument_ids().iter().map(ToString::to_string))
-            .collect();
-        assert_eq!(
-            ids,
-            [
-                "BTCUSDT-PERP.BINANCE",
-                "BTCUSDT-LINEAR.BYBIT",
-                "BTC-USDT-SWAP.OKX",
-                "PF_XBTUSD.KRAKEN",
-                "BTC-USD-PERP.HYPERLIQUID",
-            ]
-        );
-    }
-
-    #[test]
     fn skips_markets_a_venue_does_not_have() {
         let feeds = FeedsBuilder::new()
             .add_venue(Venue::Hyperliquid)
             .add_market(Market::Spot)
             .add_market(Market::Futures)
-            .add_instrument("btc")
+            .add_instrument(Coin::Btc)
             .build()
             .unwrap();
         let clients: Vec<_> = feeds.iter().map(|f| f.client_id().to_string()).collect();
@@ -453,7 +495,7 @@ mod tests {
         let err = FeedsBuilder::new()
             .add_venue(Venue::Hyperliquid)
             .add_market(Market::Spot)
-            .add_instrument("btc")
+            .add_instrument(Coin::Btc)
             .build()
             .unwrap_err()
             .to_string();
@@ -461,15 +503,11 @@ mod tests {
     }
 
     #[test]
-    fn reports_every_input_error() {
-        let err = FeedsBuilder::new()
-            .add_instrument("btc_usdt")
-            .build()
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("invalid asset \"btc_usdt\""), "{err}");
-        assert!(err.contains("no venue added"), "{err}");
-        assert!(err.contains("no market added"), "{err}");
+    fn reports_every_missing_input() {
+        let err = FeedsBuilder::new().build().unwrap_err().to_string();
+        for what in ["venue", "market", "instrument"] {
+            assert!(err.contains(&format!("no {what} added")), "{err}");
+        }
     }
 
     #[test]
@@ -479,8 +517,8 @@ mod tests {
             .add_venue(Venue::Okx)
             .add_market(Market::Futures)
             .add_market(Market::Futures)
-            .add_instrument("btc")
-            .add_instrument("BTC")
+            .add_instrument(Coin::Btc)
+            .add_instrument(Coin::Btc)
             .build()
             .unwrap();
         assert_eq!(subscriptions(&feeds).len(), 1);
@@ -491,6 +529,11 @@ mod tests {
         for venue in ALL_VENUES {
             assert_eq!(venue.to_string().parse::<Venue>().unwrap(), venue);
         }
+        for coin in Coin::ALL {
+            assert_eq!(coin.to_string().parse::<Coin>().unwrap(), coin);
+        }
+        assert_eq!("BTC".parse::<Coin>().unwrap(), Coin::Btc);
+        assert!("pepe".parse::<Coin>().is_err());
         assert_eq!("Futures".parse::<Market>().unwrap(), Market::Futures);
         assert!("perp".parse::<Market>().is_err());
     }
