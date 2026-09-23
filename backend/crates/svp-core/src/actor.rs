@@ -4,27 +4,29 @@ use nautilus_common::{
     actor::{DataActor, DataActorCore, data_actor::DataActorConfig},
     nautilus_actor,
 };
-use nautilus_model::{data::TradeTick, identifiers::InstrumentId};
+use nautilus_model::data::TradeTick;
 
-/// Minimal actor: subscribes to the trade stream of each instrument and logs
+use crate::venue::Subscription;
+
+/// Minimal actor: subscribes to the trade stream of each subscription and logs
 /// every trade. Exists to prove the node connects and data flows; the
 /// aggregation actor (`SvpActor`) supersedes it.
 #[derive(Debug)]
 pub struct TradeLogger {
     core: DataActorCore,
-    instrument_ids: Vec<InstrumentId>,
+    subscriptions: Vec<Subscription>,
     n_trades: u64,
 }
 
 nautilus_actor!(TradeLogger);
 
 impl TradeLogger {
-    /// Creates a logger for the given instruments.
+    /// Creates a logger for the given subscriptions.
     #[must_use]
-    pub fn new(instrument_ids: Vec<InstrumentId>) -> Self {
+    pub fn new(subscriptions: Vec<Subscription>) -> Self {
         Self {
             core: DataActorCore::new(DataActorConfig::default()),
-            instrument_ids,
+            subscriptions,
             n_trades: 0,
         }
     }
@@ -32,18 +34,22 @@ impl TradeLogger {
 
 impl DataActor for TradeLogger {
     fn on_start(&mut self) -> anyhow::Result<()> {
-        // `client_id = None`: the data engine routes by the instrument's venue,
-        // which matches the client name the factory registered ("BINANCE").
-        for id in self.instrument_ids.clone() {
-            log::info!("subscribing to trades for {id}");
-            self.subscribe_trades(id, None, None);
+        // Route by client, not by venue: one venue can have several clients
+        // (Binance spot and futures), none of them named after the venue.
+        for sub in self.subscriptions.clone() {
+            log::info!(
+                "subscribing to trades for {} on {}",
+                sub.instrument_id,
+                sub.client_id
+            );
+            self.subscribe_trades(sub.instrument_id, Some(sub.client_id), None);
         }
         Ok(())
     }
 
     fn on_stop(&mut self) -> anyhow::Result<()> {
-        for id in self.instrument_ids.clone() {
-            self.unsubscribe_trades(id, None, None);
+        for sub in self.subscriptions.clone() {
+            self.unsubscribe_trades(sub.instrument_id, Some(sub.client_id), None);
         }
         log::info!("stopped after {} trades", self.n_trades);
         Ok(())

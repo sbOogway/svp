@@ -1,49 +1,37 @@
 //! Construction of the Nautilus [`LiveNode`] that hosts every venue client.
 
-use nautilus_binance::{
-    common::enums::{BinanceEnvironment, BinanceProductType},
-    config::{BinanceDataClientConfig, BinanceInstrumentProviderConfig},
-    factories::BinanceDataClientFactory,
-};
 use nautilus_common::enums::Environment;
 use nautilus_live::node::LiveNode;
-use nautilus_model::identifiers::{InstrumentId, TraderId};
+use nautilus_model::identifiers::TraderId;
 
-use crate::actor::TradeLogger;
+use crate::{
+    actor::TradeLogger,
+    venue::{self, DataClientSpec, Feed},
+};
 
-/// Builds a node with a Binance USD-M futures data client (public streams, no
-/// keys) and a [`TradeLogger`] for `instrument_ids`.
+/// Builds a node with one data client per feed and a [`TradeLogger`] over the
+/// instruments of all feeds.
 ///
 /// Building the node initializes Nautilus logging, which registers the global
 /// `log` logger: the caller must not have registered another one.
 ///
 /// # Errors
 ///
-/// Returns an error if the node or the client configuration is invalid.
-pub fn build(instrument_ids: Vec<InstrumentId>) -> anyhow::Result<LiveNode> {
-    // Load only the instruments we subscribe to: `load_all` fetches the whole
-    // exchange info (~500 symbols) and warns for every non-trading one.
-    let binance = BinanceDataClientConfig {
-        product_type: BinanceProductType::UsdM,
-        environment: BinanceEnvironment::Live,
-        instrument_provider: BinanceInstrumentProviderConfig {
-            load_all: false,
-            load_ids: Some(instrument_ids.iter().map(ToString::to_string).collect()),
-            ..Default::default()
-        },
-        ..Default::default()
-    };
+/// Returns an error if `feeds` is empty, two feeds share a client id, or the
+/// node or a client configuration is invalid.
+pub fn build(feeds: &[Box<dyn Feed>]) -> anyhow::Result<LiveNode> {
+    anyhow::ensure!(!feeds.is_empty(), "no feeds configured");
 
-    let mut node = LiveNode::builder(TraderId::from("SVP-001"), Environment::Live)?
+    let mut builder = LiveNode::builder(TraderId::from("SVP-001"), Environment::Live)?
         .with_name("svp")
-        .with_delay_post_stop_secs(1)
-        .add_data_client(
-            None,
-            Box::new(BinanceDataClientFactory::new()),
-            Box::new(binance),
-        )?
-        .build()?;
+        .with_delay_post_stop_secs(1);
 
-    node.add_actor(TradeLogger::new(instrument_ids))?;
+    for feed in feeds {
+        let DataClientSpec { factory, config } = feed.data_client();
+        builder = builder.add_data_client(Some(feed.client_id().to_string()), factory, config)?;
+    }
+
+    let mut node = builder.build()?;
+    node.add_actor(TradeLogger::new(venue::subscriptions(feeds)))?;
     Ok(node)
 }
