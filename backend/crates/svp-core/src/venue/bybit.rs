@@ -2,26 +2,31 @@ use nautilus_bybit::{
     common::enums::BybitProductType, config::BybitDataClientConfig,
     factories::BybitDataClientFactory,
 };
+use nautilus_model::identifiers::InstrumentId;
 
-use super::{DataClientSpec, Market};
+use super::{Coin, DataClientSpec, Exchange, Market};
 
-pub(super) fn symbol(market: Market, base: &str) -> String {
-    match market {
-        Market::SPOT => format!("{base}USDT-SPOT"),
-        Market::FUTURES => format!("{base}USDT-LINEAR"),
+pub(super) struct Bybit;
+
+impl Exchange for Bybit {
+    fn symbol(&self, market: Market, coin: Coin) -> Option<String> {
+        Some(match market {
+            Market::Spot => format!("{coin}USDT-SPOT"),
+            Market::Futures => format!("{coin}USDT-LINEAR"),
+        })
     }
-}
 
-pub(super) fn data_client(market: Market) -> DataClientSpec {
-    let config = BybitDataClientConfig {
-        product_types: vec![match market {
-            Market::SPOT => BybitProductType::Spot,
-            Market::FUTURES => BybitProductType::Linear,
-        }],
-        ..Default::default()
-    };
-    DataClientSpec {
-        factory: Box::new(BybitDataClientFactory::new()),
-        config: Box::new(config),
+    fn data_client(&self, market: Market, _instrument_ids: &[InstrumentId]) -> DataClientSpec {
+        let config = BybitDataClientConfig {
+            product_types: vec![match market {
+                Market::Spot => BybitProductType::Spot,
+                Market::Futures => BybitProductType::Linear,
+            }],
+            ..Default::default()
+        };
+        DataClientSpec {
+            factory: Box::new(BybitDataClientFactory::new()),
+            config: Box::new(config),
+        }
     }
 }

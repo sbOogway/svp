@@ -1,19 +1,25 @@
 use nautilus_hyperliquid::{
     config::HyperliquidDataClientConfig, factories::HyperliquidDataClientFactory,
 };
+use nautilus_model::identifiers::InstrumentId;
 
-use super::{DataClientSpec, Market};
+use super::{Coin, DataClientSpec, Exchange, Market};
 
-pub(super) fn symbol(market: Market, base: &str) -> Option<String> {
-    match market {
-        Market::SPOT => None,
-        Market::FUTURES => Some(format!("{base}-USD-PERP")),
+pub(super) struct Hyperliquid;
+
+impl Exchange for Hyperliquid {
+    fn symbol(&self, market: Market, coin: Coin) -> Option<String> {
+        match market {
+            Market::Spot => None,
+            Market::Futures => Some(format!("{coin}-USD-PERP")),
+        }
     }
-}
 
-pub(super) fn data_client() -> DataClientSpec {
-    DataClientSpec {
-        factory: Box::new(HyperliquidDataClientFactory::new()),
-        config: Box::new(HyperliquidDataClientConfig::default()),
+    // One client serves every market.
+    fn data_client(&self, _market: Market, _instrument_ids: &[InstrumentId]) -> DataClientSpec {
+        DataClientSpec {
+            factory: Box::new(HyperliquidDataClientFactory::new()),
+            config: Box::new(HyperliquidDataClientConfig::default()),
+        }
     }
 }

@@ -5,35 +5,39 @@ use nautilus_binance::{
 };
 use nautilus_model::identifiers::InstrumentId;
 
-use super::{DataClientSpec, Market};
+use super::{Coin, DataClientSpec, Exchange, Market};
 
-pub(super) fn symbol(market: Market, base: &str) -> String {
-    match market {
-        Market::SPOT => format!("{base}USDT"),
-        Market::FUTURES => format!("{base}USDT-PERP"),
+pub(super) struct Binance;
+
+impl Exchange for Binance {
+    fn symbol(&self, market: Market, coin: Coin) -> Option<String> {
+        Some(match market {
+            Market::Spot => format!("{coin}USDT"),
+            Market::Futures => format!("{coin}USDT-PERP"),
+        })
     }
-}
 
-pub(super) fn data_client(market: Market, instrument_ids: &[InstrumentId]) -> DataClientSpec {
-    // Load only the instruments we subscribe to: `load_all` fetches the whole
-    // exchange info (~500 symbols) and warns for every non-trading one.
-    let config = BinanceDataClientConfig {
-        product_type: match market {
-            Market::SPOT => BinanceProductType::Spot,
-            Market::FUTURES => BinanceProductType::UsdM,
-        },
-        environment: BinanceEnvironment::Live,
-        // SBE (the default) requires Ed25519 keys; ignored off spot.
-        spot_market_data_mode: BinanceSpotMarketDataMode::Json,
-        instrument_provider: BinanceInstrumentProviderConfig {
-            load_all: false,
-            load_ids: Some(instrument_ids.iter().map(ToString::to_string).collect()),
+    fn data_client(&self, market: Market, instrument_ids: &[InstrumentId]) -> DataClientSpec {
+        // Load only the instruments we subscribe to: `load_all` fetches the whole
+        // exchange info (~500 symbols) and warns for every non-trading one.
+        let config = BinanceDataClientConfig {
+            product_type: match market {
+                Market::Spot => BinanceProductType::Spot,
+                Market::Futures => BinanceProductType::UsdM,
+            },
+            environment: BinanceEnvironment::Live,
+            // SBE (the default) requires Ed25519 keys; ignored off spot.
+            spot_market_data_mode: BinanceSpotMarketDataMode::Json,
+            instrument_provider: BinanceInstrumentProviderConfig {
+                load_all: false,
+                load_ids: Some(instrument_ids.iter().map(ToString::to_string).collect()),
+                ..Default::default()
+            },
             ..Default::default()
-        },
-        ..Default::default()
-    };
-    DataClientSpec {
-        factory: Box::new(BinanceDataClientFactory::new()),
-        config: Box::new(config),
+        };
+        DataClientSpec {
+            factory: Box::new(BinanceDataClientFactory::new()),
+            config: Box::new(config),
+        }
     }
 }

@@ -2,29 +2,32 @@ use nautilus_kraken::{
     common::enums::KrakenProductType, config::KrakenDataClientConfig,
     factories::KrakenDataClientFactory,
 };
+use nautilus_model::identifiers::InstrumentId;
 
-use super::{DataClientSpec, Market};
+use super::{Coin, DataClientSpec, Exchange, Market};
 
-pub(super) fn symbol(market: Market, base: &str) -> String {
-    match market {
-        Market::SPOT => format!("{base}/USD"),
-        Market::FUTURES => {
-            let base = if base == "BTC" { "XBT" } else { base };
-            format!("PF_{base}USD")
-        }
+pub(super) struct Kraken;
+
+impl Exchange for Kraken {
+    fn symbol(&self, market: Market, coin: Coin) -> Option<String> {
+        Some(match market {
+            Market::Spot => format!("{coin}/USD"),
+            Market::Futures if coin == Coin::BTC => "PF_XBTUSD".to_string(),
+            Market::Futures => format!("PF_{coin}USD"),
+        })
     }
-}
 
-pub(super) fn data_client(market: Market) -> DataClientSpec {
-    let config = KrakenDataClientConfig {
-        product_type: match market {
-            Market::SPOT => KrakenProductType::Spot,
-            Market::FUTURES => KrakenProductType::Futures,
-        },
-        ..Default::default()
-    };
-    DataClientSpec {
-        factory: Box::new(KrakenDataClientFactory::new()),
-        config: Box::new(config),
+    fn data_client(&self, market: Market, _instrument_ids: &[InstrumentId]) -> DataClientSpec {
+        let config = KrakenDataClientConfig {
+            product_type: match market {
+                Market::Spot => KrakenProductType::Spot,
+                Market::Futures => KrakenProductType::Futures,
+            },
+            ..Default::default()
+        };
+        DataClientSpec {
+            factory: Box::new(KrakenDataClientFactory::new()),
+            config: Box::new(config),
+        }
     }
 }

@@ -15,11 +15,13 @@ mod okx;
 use nautilus_common::factories::{ClientConfig, DataClientFactory};
 use nautilus_model::identifiers::{self, ClientId, InstrumentId, Symbol};
 
-/// Declares an enum whose variants are named as they are written everywhere
-/// else (`BTC`, `BINANCE`), and derives from that one list `ALL`, `as_str`,
-/// `Display` and case-insensitive `FromStr`.
+/// Declares an enum with `ALL`, `as_str`, `Display` and case-insensitive
+/// `FromStr`, all derived from one list. A variant's string is its name, or the
+/// literal after `=` (`Binance = "BINANCE"`).
 macro_rules! named_enum {
-    ($(#[$meta:meta])* $vis:vis enum $name:ident { $($(#[$vmeta:meta])* $variant:ident),+ $(,)? }) => {
+    ($(#[$meta:meta])* $vis:vis enum $name:ident {
+        $($(#[$vmeta:meta])* $variant:ident $(= $string:literal)?),+ $(,)?
+    }) => {
         $(#[$meta])*
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         $vis enum $name {
@@ -31,7 +33,7 @@ macro_rules! named_enum {
 
             pub const fn as_str(self) -> &'static str {
                 match self {
-                    $(Self::$variant => stringify!($variant)),+
+                    $(Self::$variant => named_enum!(@string $variant $($string)?)),+
                 }
             }
         }
@@ -54,44 +56,53 @@ macro_rules! named_enum {
             }
         }
     };
+    (@string $variant:ident) => { stringify!($variant) };
+    (@string $variant:ident $string:literal) => { $string };
+}
+
+/// What each exchange module provides. `symbol` is `None` for a market the
+/// exchange doesn't have.
+trait Exchange {
+    fn symbol(&self, market: Market, coin: Coin) -> Option<String>;
+    fn data_client(&self, market: Market, instrument_ids: &[InstrumentId]) -> DataClientSpec;
 }
 
 named_enum! {
-    pub enum Venue { BINANCE, BYBIT, OKX, KRAKEN, HYPERLIQUID }
+    // The strings are Nautilus venue names.
+    pub enum Venue {
+        Binance = "BINANCE",
+        Bybit = "BYBIT",
+        Okx = "OKX",
+        Kraken = "KRAKEN",
+        Hyperliquid = "HYPERLIQUID",
+    }
 }
 
 impl Venue {
+    fn exchange(self) -> &'static dyn Exchange {
+        match self {
+            Self::Binance => &binance::Binance,
+            Self::Bybit => &bybit::Bybit,
+            Self::Okx => &okx::Okx,
+            Self::Kraken => &kraken::Kraken,
+            Self::Hyperliquid => &hyperliquid::Hyperliquid,
+        }
+    }
+
     fn instrument_id(self, market: Market, coin: Coin) -> Option<InstrumentId> {
-        let base = coin.as_str();
-        let symbol = match self {
-            Self::BINANCE => Some(binance::symbol(market, base)),
-            Self::BYBIT => Some(bybit::symbol(market, base)),
-            Self::OKX => Some(okx::symbol(market, base)),
-            Self::KRAKEN => Some(kraken::symbol(market, base)),
-            Self::HYPERLIQUID => hyperliquid::symbol(market, base),
-        }?;
+        let symbol = self.exchange().symbol(market, coin)?;
         Some(InstrumentId::new(
             Symbol::new(symbol),
             identifiers::Venue::new(self.as_str()),
         ))
     }
-
-    fn data_client(self, market: Market, instrument_ids: &[InstrumentId]) -> DataClientSpec {
-        match self {
-            Self::BINANCE => binance::data_client(market, instrument_ids),
-            Self::BYBIT => bybit::data_client(market),
-            Self::OKX => okx::data_client(market),
-            Self::KRAKEN => kraken::data_client(market),
-            Self::HYPERLIQUID => hyperliquid::data_client(),
-        }
-    }
 }
 
 named_enum! {
     pub enum Market {
-        SPOT,
+        Spot = "SPOT",
         /// Linear perpetual swaps, margined in the quote currency.
-        FUTURES,
+        Futures = "FUTURES",
     }
 }
 
@@ -138,7 +149,9 @@ impl Feed {
     }
 
     pub fn data_client(&self) -> DataClientSpec {
-        self.venue.data_client(self.market, &self.instrument_ids)
+        self.venue
+            .exchange()
+            .data_client(self.market, &self.instrument_ids)
     }
 }
 
@@ -274,22 +287,22 @@ mod tests {
     #[test]
     fn maps_a_coin_to_each_venue_usd_instrument() {
         use Coin::{BTC, DOGE, ETH};
-        use Market::{FUTURES, SPOT};
-        use Venue::{BINANCE, BYBIT, HYPERLIQUID, KRAKEN, OKX};
+        use Market::{Futures, Spot};
+        use Venue::{Binance, Bybit, Hyperliquid, Kraken, Okx};
         let cases = [
-            (BINANCE, SPOT, BTC, Some("BTCUSDT.BINANCE")),
-            (BINANCE, FUTURES, BTC, Some("BTCUSDT-PERP.BINANCE")),
-            (BYBIT, SPOT, BTC, Some("BTCUSDT-SPOT.BYBIT")),
-            (BYBIT, FUTURES, BTC, Some("BTCUSDT-LINEAR.BYBIT")),
-            (OKX, SPOT, BTC, Some("BTC-USDT.OKX")),
-            (OKX, FUTURES, BTC, Some("BTC-USDT-SWAP.OKX")),
-            (KRAKEN, SPOT, BTC, Some("BTC/USD.KRAKEN")),
-            (KRAKEN, FUTURES, BTC, Some("PF_XBTUSD.KRAKEN")),
-            (KRAKEN, FUTURES, ETH, Some("PF_ETHUSD.KRAKEN")),
-            (KRAKEN, SPOT, DOGE, Some("DOGE/USD.KRAKEN")),
-            (KRAKEN, FUTURES, DOGE, Some("PF_DOGEUSD.KRAKEN")),
-            (HYPERLIQUID, SPOT, BTC, None),
-            (HYPERLIQUID, FUTURES, BTC, Some("BTC-USD-PERP.HYPERLIQUID")),
+            (Binance, Spot, BTC, Some("BTCUSDT.BINANCE")),
+            (Binance, Futures, BTC, Some("BTCUSDT-PERP.BINANCE")),
+            (Bybit, Spot, BTC, Some("BTCUSDT-SPOT.BYBIT")),
+            (Bybit, Futures, BTC, Some("BTCUSDT-LINEAR.BYBIT")),
+            (Okx, Spot, BTC, Some("BTC-USDT.OKX")),
+            (Okx, Futures, BTC, Some("BTC-USDT-SWAP.OKX")),
+            (Kraken, Spot, BTC, Some("BTC/USD.KRAKEN")),
+            (Kraken, Futures, BTC, Some("PF_XBTUSD.KRAKEN")),
+            (Kraken, Futures, ETH, Some("PF_ETHUSD.KRAKEN")),
+            (Kraken, Spot, DOGE, Some("DOGE/USD.KRAKEN")),
+            (Kraken, Futures, DOGE, Some("PF_DOGEUSD.KRAKEN")),
+            (Hyperliquid, Spot, BTC, None),
+            (Hyperliquid, Futures, BTC, Some("BTC-USD-PERP.HYPERLIQUID")),
         ];
         for (venue, market, coin, expected) in cases {
             assert_eq!(
@@ -306,7 +319,7 @@ mod tests {
             for &market in Market::ALL {
                 for &coin in Coin::ALL {
                     let listed = id(venue, market, coin).is_some();
-                    let expected = !(venue == Venue::HYPERLIQUID && market == Market::SPOT);
+                    let expected = !(venue == Venue::Hyperliquid && market == Market::Spot);
                     assert_eq!(listed, expected, "{venue} {market} {coin}");
                 }
             }
@@ -316,10 +329,10 @@ mod tests {
     #[test]
     fn combines_venues_markets_and_coins() {
         let feeds = FeedsBuilder::new()
-            .add_venue(Venue::BINANCE)
-            .add_venue(Venue::BYBIT)
-            .add_market(Market::SPOT)
-            .add_market(Market::FUTURES)
+            .add_venue(Venue::Binance)
+            .add_venue(Venue::Bybit)
+            .add_market(Market::Spot)
+            .add_market(Market::Futures)
             .add_instrument(Coin::BTC)
             .add_instrument(Coin::ETH)
             .build()
@@ -341,9 +354,9 @@ mod tests {
     #[test]
     fn skips_markets_a_venue_does_not_have() {
         let feeds = FeedsBuilder::new()
-            .add_venue(Venue::HYPERLIQUID)
-            .add_market(Market::SPOT)
-            .add_market(Market::FUTURES)
+            .add_venue(Venue::Hyperliquid)
+            .add_market(Market::Spot)
+            .add_market(Market::Futures)
             .add_instrument(Coin::BTC)
             .build()
             .unwrap();
@@ -354,8 +367,8 @@ mod tests {
     #[test]
     fn fails_when_nothing_is_listed() {
         let err = FeedsBuilder::new()
-            .add_venue(Venue::HYPERLIQUID)
-            .add_market(Market::SPOT)
+            .add_venue(Venue::Hyperliquid)
+            .add_market(Market::Spot)
             .add_instrument(Coin::BTC)
             .build()
             .unwrap_err()
@@ -374,10 +387,10 @@ mod tests {
     #[test]
     fn ignores_duplicates() {
         let feeds = FeedsBuilder::new()
-            .add_venue(Venue::OKX)
-            .add_venue(Venue::OKX)
-            .add_market(Market::FUTURES)
-            .add_market(Market::FUTURES)
+            .add_venue(Venue::Okx)
+            .add_venue(Venue::Okx)
+            .add_market(Market::Futures)
+            .add_market(Market::Futures)
             .add_instrument(Coin::BTC)
             .add_instrument(Coin::BTC)
             .build()
@@ -395,7 +408,7 @@ mod tests {
         }
         assert!("pepe".parse::<Coin>().is_err());
         assert_eq!("btc".parse::<Coin>().unwrap(), Coin::BTC);
-        assert_eq!("Futures".parse::<Market>().unwrap(), Market::FUTURES);
+        assert_eq!("Futures".parse::<Market>().unwrap(), Market::Futures);
         assert!("perp".parse::<Market>().is_err());
     }
 
