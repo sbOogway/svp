@@ -34,10 +34,25 @@ impl DataActor for TradeLogger {
     fn on_start(&mut self) -> anyhow::Result<()> {
         // Route by client, not by venue: one venue can have several clients
         // (Binance spot and futures), none of them named after the venue.
+        // Trades are subscribed in `on_instrument`, once the client has the
+        // instrument: some load only part of their venue's instruments on
+        // connect (Coinbase: spot only) and drop trades for the rest,
+        // including the recent trades Coinbase sends on subscribing.
         for sub in self.subscriptions.clone() {
-            // Some clients load only part of their venue's instruments on
-            // connect (Coinbase: spot only) and drop trades for the rest.
             self.request_instrument(sub.instrument_id, None, None, Some(sub.client_id), None)?;
+        }
+        Ok(())
+    }
+
+    fn on_instrument(&mut self, instrument: &InstrumentAny) -> anyhow::Result<()> {
+        let instrument_id = instrument.id();
+        let subs: Vec<_> = self
+            .subscriptions
+            .iter()
+            .filter(|sub| sub.instrument_id == instrument_id)
+            .copied()
+            .collect();
+        for sub in subs {
             log::info!(
                 "subscribing to trades for {} on {}",
                 sub.instrument_id,
