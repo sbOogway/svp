@@ -12,7 +12,6 @@ use crate::venue::Subscription;
 pub struct TradeLogger {
     core: DataActorCore,
     subscriptions: Vec<Subscription>,
-    n_trades: u64,
 }
 
 nautilus_actor!(TradeLogger);
@@ -23,7 +22,6 @@ impl TradeLogger {
         Self {
             core: DataActorCore::new(DataActorConfig::default()),
             subscriptions,
-            n_trades: 0,
         }
     }
 }
@@ -47,12 +45,11 @@ impl DataActor for TradeLogger {
         for sub in self.subscriptions.clone() {
             self.unsubscribe_trades(sub.instrument_id, Some(sub.client_id), None);
         }
-        log::info!("stopped after {} trades", self.n_trades);
+        log::info!("stopped TradeLogger");
         Ok(())
     }
 
     fn on_trade(&mut self, tick: &TradeTick) -> anyhow::Result<()> {
-        self.n_trades += 1;
         log::info!(
             "{} {:?} {} @ {} id={} ts_event={}",
             tick.instrument_id,
