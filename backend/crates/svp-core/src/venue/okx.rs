@@ -1,27 +1,32 @@
+use nautilus_model::identifiers::InstrumentId;
 use nautilus_okx::{
     common::enums::OKXInstrumentType, config::OKXDataClientConfig, factories::OKXDataClientFactory,
 };
 
-use super::{DataClientSpec, Market};
+use super::{Coin, DataClientSpec, Exchange, Market};
 
-// USDT, not USD: `BTC-USD-SWAP` is an inverse contract.
-pub(super) fn symbol(market: Market, base: &str) -> String {
-    match market {
-        Market::SPOT => format!("{base}-USDT"),
-        Market::FUTURES => format!("{base}-USDT-SWAP"),
+pub(super) struct Okx;
+
+impl Exchange for Okx {
+    // USDT, not USD: `BTC-USD-SWAP` is an inverse contract.
+    fn symbol(&self, market: Market, coin: Coin) -> Option<String> {
+        Some(match market {
+            Market::Spot => format!("{coin}-USDT"),
+            Market::Futures => format!("{coin}-USDT-SWAP"),
+        })
     }
-}
 
-pub(super) fn data_client(market: Market) -> DataClientSpec {
-    let config = OKXDataClientConfig {
-        instrument_types: vec![match market {
-            Market::SPOT => OKXInstrumentType::Spot,
-            Market::FUTURES => OKXInstrumentType::Swap,
-        }],
-        ..Default::default()
-    };
-    DataClientSpec {
-        factory: Box::new(OKXDataClientFactory::new()),
-        config: Box::new(config),
+    fn data_client(&self, market: Market, _instrument_ids: &[InstrumentId]) -> DataClientSpec {
+        let config = OKXDataClientConfig {
+            instrument_types: vec![match market {
+                Market::Spot => OKXInstrumentType::Spot,
+                Market::Futures => OKXInstrumentType::Swap,
+            }],
+            ..Default::default()
+        };
+        DataClientSpec {
+            factory: Box::new(OKXDataClientFactory::new()),
+            config: Box::new(config),
+        }
     }
 }
