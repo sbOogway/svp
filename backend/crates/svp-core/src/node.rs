@@ -17,9 +17,8 @@ use crate::{
 ///
 /// # Errors
 ///
-/// Returns an error if the node or a client configuration is invalid. `feeds`
-/// is expected to come from [`venue::FeedsBuilder`], which validates the set.
-pub fn build(feeds: &[Box<dyn Feed>]) -> anyhow::Result<LiveNode> {
+/// Returns an error if the node or a client configuration is invalid.
+pub fn build(feeds: &[Feed]) -> anyhow::Result<LiveNode> {
     let mut builder = LiveNode::builder(TraderId::from("SVP-001"), Environment::Live)?
         .with_name("svp")
         .with_delay_post_stop_secs(1);

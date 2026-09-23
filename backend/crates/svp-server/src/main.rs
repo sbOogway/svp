@@ -1,8 +1,6 @@
 //! svp backend binary. Populated in milestones M1 and M2.
 
-use svp_core::venue::{
-    FeedsBuilder, binance::BinanceMarket, bybit::BybitMarket, kraken::KrakenMarket, okx::OkxMarket,
-};
+use svp_core::venue::{FeedsBuilder, Market, Venue};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -16,13 +14,16 @@ async fn main() -> anyhow::Result<()> {
     tracing::subscriber::set_global_default(subscriber)?;
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "svp starting");
 
+    // BTC perpetuals everywhere: Kraken and Hyperliquid quote them in USD.
     let feeds = FeedsBuilder::new()
-        .binance(BinanceMarket::UsdM, &["BTCUSDT-PERP.BINANCE"])
-        .binance(BinanceMarket::Spot, &["BTCUSDT.BINANCE"])
-        .bybit(BybitMarket::Linear, &["BTCUSDT-LINEAR.BYBIT"])
-        .okx(OkxMarket::Swap, &["BTC-USDT-SWAP.OKX"])
-        .kraken(KrakenMarket::Futures, &["PF_XBTUSD.KRAKEN"])
-        .hyperliquid(&["BTC-USD-PERP.HYPERLIQUID"])
+        .add_venue(Venue::Binance)
+        .add_venue(Venue::Bybit)
+        .add_venue(Venue::Okx)
+        .add_venue(Venue::Kraken)
+        .add_venue(Venue::Hyperliquid)
+        .add_market(Market::Futures)
+        .add_instrument("btc_usdt")
+        .add_instrument("btc_usd")
         .build()?;
 
     let mut node = svp_core::node::build(&feeds)?;
