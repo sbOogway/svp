@@ -63,7 +63,7 @@ macro_rules! named_enum {
 /// What each exchange module provides. `symbol` is `None` for a market the
 /// exchange doesn't have.
 trait Exchange {
-    fn symbol(&self, market: Market, coin: Coin) -> Option<String>;
+    fn symbol(&self, market: Market, coin: Coin) -> Option<Symbol>;
     fn data_client(&self, market: Market, instrument_ids: &[InstrumentId]) -> DataClientSpec;
 }
 
@@ -92,7 +92,7 @@ impl Venue {
     fn instrument_id(self, market: Market, coin: Coin) -> Option<InstrumentId> {
         let symbol = self.exchange().symbol(market, coin)?;
         Some(InstrumentId::new(
-            Symbol::new(symbol),
+            symbol,
             identifiers::Venue::new(self.as_str()),
         ))
     }

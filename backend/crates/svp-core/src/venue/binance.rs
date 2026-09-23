@@ -3,18 +3,18 @@ use nautilus_binance::{
     config::{BinanceDataClientConfig, BinanceInstrumentProviderConfig, BinanceSpotMarketDataMode},
     factories::BinanceDataClientFactory,
 };
-use nautilus_model::identifiers::InstrumentId;
+use nautilus_model::identifiers::{InstrumentId, Symbol};
 
 use super::{Coin, DataClientSpec, Exchange, Market};
 
 pub(super) struct Binance;
 
 impl Exchange for Binance {
-    fn symbol(&self, market: Market, coin: Coin) -> Option<String> {
-        Some(match market {
+    fn symbol(&self, market: Market, coin: Coin) -> Option<Symbol> {
+        Some(Symbol::new(match market {
             Market::Spot => format!("{coin}USDT"),
             Market::Futures => format!("{coin}USDT-PERP"),
-        })
+        }))
     }
 
     fn data_client(&self, market: Market, instrument_ids: &[InstrumentId]) -> DataClientSpec {

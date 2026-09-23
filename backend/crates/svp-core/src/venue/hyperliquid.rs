@@ -1,17 +1,17 @@
 use nautilus_hyperliquid::{
     config::HyperliquidDataClientConfig, factories::HyperliquidDataClientFactory,
 };
-use nautilus_model::identifiers::InstrumentId;
+use nautilus_model::identifiers::{InstrumentId, Symbol};
 
 use super::{Coin, DataClientSpec, Exchange, Market};
 
 pub(super) struct Hyperliquid;
 
 impl Exchange for Hyperliquid {
-    fn symbol(&self, market: Market, coin: Coin) -> Option<String> {
+    fn symbol(&self, market: Market, coin: Coin) -> Option<Symbol> {
         match market {
             Market::Spot => None,
-            Market::Futures => Some(format!("{coin}-USD-PERP")),
+            Market::Futures => Some(Symbol::new(format!("{coin}-USD-PERP"))),
         }
     }
 
