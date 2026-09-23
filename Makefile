@@ -1,5 +1,5 @@
 # svp — local CI. The git hooks call these targets; run them by hand any time.
-# There is intentionally no hosted CI: see docs/ARCHITECTURE.md § "Workflow".
+# There is intentionally no hosted CI: see the wiki, https://github.com/sbOogway/svp/wiki/Architecture#workflow
 
 .PHONY: help setup fmt lint typecheck test audit build ci ci-fast ci-clean deploy-pages
 
