@@ -3,44 +3,44 @@
 
 .PHONY: help setup fmt lint typecheck test audit build ci ci-fast ci-clean deploy-pages
 
-help: ## Show this help
+help:
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-setup: ## One-time per clone: install git hooks (prek) and frontend deps
+setup:
 	@command -v prek >/dev/null || { echo "prek is required: https://prek.j178.dev/installation/" >&2; exit 1; }
 	git config --unset core.hooksPath || true
 	prek install --overwrite
 	cd frontend && npm ci --no-fund --no-audit
 
-fmt: ## Rust formatting check
+fmt: 
 	cd backend && cargo fmt --all --check
 
-lint: ## Rust clippy (deny warnings) + frontend oxlint
+lint: 
 	cd backend && cargo clippy --workspace --all-targets -- -D warnings
 	cd frontend && npm run lint
 
-typecheck: ## Frontend TypeScript check
+typecheck:
 	cd frontend && npm run typecheck
 
-test: ## Rust tests
+test:
 	cd backend && cargo test --workspace
 
-audit: ## Dependency vulnerability audit (skips tools that are not installed)
+audit:
 	@if command -v cargo-audit >/dev/null; then cd backend && cargo audit; else echo "cargo-audit not installed: cargo install cargo-audit --locked"; fi
 	cd frontend && npm audit --audit-level=high
 
-build: ## Release build of backend and frontend
+build:
 	cd backend && cargo build --workspace --release
 	cd frontend && npm run build
 
-ci-fast: fmt lint typecheck ## What pre-commit runs (seconds)
+ci-fast: fmt lint typecheck 
 
-ci: ci-fast test audit build ## What pre-push runs (minutes on first build)
+ci: ci-fast test audit build 
 
-ci-clean: ## Full CI from a clean state (run before tagging a release)
+ci-clean: 
 	cd backend && cargo clean
 	rm -rf frontend/node_modules frontend/dist
 	$(MAKE) setup ci
 
-deploy-pages: ## Build the frontend for GitHub Pages and push it to the gh-pages branch
+deploy-pages: 
 	./scripts/deploy-pages.sh
