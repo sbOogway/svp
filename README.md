@@ -7,7 +7,7 @@ VWAP…), and streams them over WebSocket to a TypeScript frontend built on
 [KLineChart](https://klinecharts.com).
 
 Status: **M1 — multi-venue trade-driven aggregation**. See the [milestones](https://github.com/sbOogway/svp/milestones)
-and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+and the [architecture decisions](https://github.com/sbOogway/svp/wiki/Architecture) in the wiki.
 
 ## Layout
 
@@ -17,7 +17,6 @@ backend/    Cargo workspace
   crates/svp-core       Nautilus live node, aggregation actor, broadcast bridge
   crates/svp-server     axum REST + WebSocket server, serves the frontend, binary `svp`
 frontend/   Vite + React + TypeScript, KLineChart
-docs/       architecture and runbooks
 scripts/    setup and deploy
 .githooks/  local CI (there is no hosted CI, by design)
 ```
