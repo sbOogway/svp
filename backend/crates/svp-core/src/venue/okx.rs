@@ -1,4 +1,4 @@
-use nautilus_model::identifiers::InstrumentId;
+use nautilus_model::identifiers::{InstrumentId, Symbol};
 use nautilus_okx::{
     common::enums::OKXInstrumentType, config::OKXDataClientConfig, factories::OKXDataClientFactory,
 };
@@ -9,11 +9,11 @@ pub(super) struct Okx;
 
 impl Exchange for Okx {
     // USDT, not USD: `BTC-USD-SWAP` is an inverse contract.
-    fn symbol(&self, market: Market, coin: Coin) -> Option<String> {
-        Some(match market {
+    fn symbol(&self, market: Market, coin: Coin) -> Option<Symbol> {
+        Some(Symbol::new(match market {
             Market::Spot => format!("{coin}-USDT"),
             Market::Futures => format!("{coin}-USDT-SWAP"),
-        })
+        }))
     }
 
     fn data_client(&self, market: Market, _instrument_ids: &[InstrumentId]) -> DataClientSpec {
