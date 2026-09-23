@@ -1,4 +1,4 @@
-//! Kraken: spot and USD multi-collateral perpetuals (`PF_`, where BTC is
+//! Kraken: USD spot and USD multi-collateral perpetuals (`PF_`, where BTC is
 //! `XBT`). Public streams only, no API keys.
 
 use nautilus_kraken::{
@@ -6,17 +6,15 @@ use nautilus_kraken::{
     factories::KrakenDataClientFactory,
 };
 
-use super::{DataClientSpec, Market, Pair};
+use super::{DataClientSpec, Market};
 
-pub(super) fn symbol(market: Market, pair: &Pair) -> Option<String> {
-    let (base, quote) = (pair.base(), pair.quote());
+pub(super) fn symbol(market: Market, base: &str) -> String {
     match market {
-        Market::Spot => Some(format!("{base}/{quote}")),
-        Market::Futures if quote == "USD" => {
+        Market::Spot => format!("{base}/USD"),
+        Market::Futures => {
             let base = if base == "BTC" { "XBT" } else { base };
-            Some(format!("PF_{base}USD"))
+            format!("PF_{base}USD")
         }
-        Market::Futures => None,
     }
 }
 

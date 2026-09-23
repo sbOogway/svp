@@ -1,19 +1,17 @@
-//! Bybit: spot and USDT linear perpetuals. Public streams only, no API keys.
+//! Bybit: USDT spot and USDT linear perpetuals. Public streams only, no API
+//! keys.
 
 use nautilus_bybit::{
     common::enums::BybitProductType, config::BybitDataClientConfig,
     factories::BybitDataClientFactory,
 };
 
-use super::{DataClientSpec, Market, Pair};
+use super::{DataClientSpec, Market};
 
-pub(super) fn symbol(market: Market, pair: &Pair) -> Option<String> {
-    let (base, quote) = (pair.base(), pair.quote());
+pub(super) fn symbol(market: Market, base: &str) -> String {
     match market {
-        Market::Spot => Some(format!("{base}{quote}-SPOT")),
-        // USDC perpetuals use another naming scheme (`BTCPERP`), not mapped.
-        Market::Futures if quote == "USDT" => Some(format!("{base}{quote}-LINEAR")),
-        Market::Futures => None,
+        Market::Spot => format!("{base}USDT-SPOT"),
+        Market::Futures => format!("{base}USDT-LINEAR"),
     }
 }
 

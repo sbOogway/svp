@@ -1,10 +1,10 @@
-//! Venues, markets and pairs, and how they map onto Nautilus data clients.
+//! Venues, markets and assets, and how they map onto Nautilus data clients.
 //!
-//! A [`FeedsBuilder`] takes venues, markets and pairs separately and combines
-//! them: one [`Feed`] (data client) per venue and market, subscribed to every
-//! pair that venue lists in that market. Adding a venue means adding a
-//! [`Venue`] variant and a module that spells a pair in each market and
-//! configures the adapter.
+//! A [`FeedsBuilder`] takes venues, markets and assets separately and combines
+//! them: one [`Feed`] (data client) per venue and market, subscribed to the
+//! USD instrument of every asset that venue lists in that market. Adding a
+//! venue means adding a [`Venue`] variant and a module that spells an asset's
+//! USD instrument in each market and configures the adapter.
 
 mod binance;
 mod bybit;
@@ -44,15 +44,16 @@ impl Venue {
         }
     }
 
-    /// The instrument id of `pair` in `market`, or `None` if the venue does
-    /// not list that kind of instrument.
-    fn instrument_id(self, market: Market, pair: &Pair) -> Option<InstrumentId> {
+    /// The id of `asset`'s USD instrument in `market`, whatever the venue
+    /// quotes it in (USD, USDT…), or `None` if the venue has no such market.
+    fn instrument_id(self, market: Market, asset: &Asset) -> Option<InstrumentId> {
+        let base = asset.as_str();
         let symbol = match self {
-            Self::Binance => binance::symbol(market, pair),
-            Self::Bybit => bybit::symbol(market, pair),
-            Self::Okx => okx::symbol(market, pair),
-            Self::Kraken => kraken::symbol(market, pair),
-            Self::Hyperliquid => hyperliquid::symbol(market, pair),
+            Self::Binance => Some(binance::symbol(market, base)),
+            Self::Bybit => Some(bybit::symbol(market, base)),
+            Self::Okx => Some(okx::symbol(market, base)),
+            Self::Kraken => Some(kraken::symbol(market, base)),
+            Self::Hyperliquid => hyperliquid::symbol(market, base),
         }?;
         Some(InstrumentId::new(
             Symbol::new(symbol),
@@ -122,48 +123,33 @@ impl FromStr for Market {
     }
 }
 
-/// A base and a quote asset, written `base_quote` (e.g. `btc_usdt`).
+/// A base asset, e.g. `btc`. Every venue quotes it against its own USD
+/// currency: USDT on Binance, Bybit and OKX, USD on Kraken and Hyperliquid.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Pair {
-    base: String,
-    quote: String,
-}
+pub struct Asset(String);
 
-impl Pair {
-    /// Base asset, upper case.
-    pub fn base(&self) -> &str {
-        &self.base
-    }
-
-    /// Quote asset, upper case.
-    pub fn quote(&self) -> &str {
-        &self.quote
+impl Asset {
+    /// The asset code, upper case.
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
-impl fmt::Display for Pair {
+impl fmt::Display for Asset {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}_{}",
-            self.base.to_ascii_lowercase(),
-            self.quote.to_ascii_lowercase()
-        )
+        f.write_str(&self.0.to_ascii_lowercase())
     }
 }
 
-impl FromStr for Pair {
+impl FromStr for Asset {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> anyhow::Result<Self> {
-        let asset = |a: &str| !a.is_empty() && a.chars().all(|c| c.is_ascii_alphanumeric());
-        match s.split_once('_') {
-            Some((base, quote)) if asset(base) && asset(quote) => Ok(Self {
-                base: base.to_ascii_uppercase(),
-                quote: quote.to_ascii_uppercase(),
-            }),
-            _ => anyhow::bail!("invalid pair {s:?}, expected base_quote (e.g. btc_usdt)"),
-        }
+        anyhow::ensure!(
+            !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric()),
+            "invalid asset {s:?}, expected a code such as btc"
+        );
+        Ok(Self(s.to_ascii_uppercase()))
     }
 }
 
@@ -240,17 +226,17 @@ pub fn subscriptions(feeds: &[Feed]) -> Vec<Subscription> {
         .collect()
 }
 
-/// Combines venues, markets and pairs into feeds.
+/// Combines venues, markets and assets into feeds.
 ///
-/// Every venue is paired with every market and every pair. A combination the
-/// venue does not list (e.g. a USDT perpetual on Kraken, whose perpetuals are
-/// USD-quoted) is logged and skipped, so adding a venue never breaks the
-/// others. Adding the same venue, market or pair twice has no effect.
+/// Every venue is paired with every market and every asset. A market the
+/// venue does not have (e.g. Hyperliquid spot) is logged and skipped, so
+/// adding a venue never breaks the others. Adding the same venue, market or
+/// asset twice has no effect.
 #[derive(Debug, Default)]
 pub struct FeedsBuilder {
     venues: Vec<Venue>,
     markets: Vec<Market>,
-    pairs: Vec<Pair>,
+    assets: Vec<Asset>,
     errors: Vec<String>,
 }
 
@@ -275,35 +261,35 @@ impl FeedsBuilder {
         self
     }
 
-    /// Adds a pair written `base_quote`, e.g. `btc_usdt`. A malformed pair is
-    /// reported by [`build`](Self::build).
+    /// Adds an asset, e.g. `btc`: its USD instrument on every venue. A
+    /// malformed asset is reported by [`build`](Self::build).
     #[must_use]
-    pub fn add_instrument(mut self, pair: &str) -> Self {
-        match pair.parse() {
-            Ok(pair) => push_unique(&mut self.pairs, pair),
+    pub fn add_instrument(mut self, asset: &str) -> Self {
+        match asset.parse() {
+            Ok(asset) => push_unique(&mut self.assets, asset),
             Err(e) => self.errors.push(e.to_string()),
         }
         self
     }
 
-    /// Returns one feed per venue and market that lists at least one pair.
+    /// Returns one feed per venue and market that lists at least one asset.
     ///
     /// # Errors
     ///
-    /// Returns every problem found: a malformed pair, no venue, market or
-    /// pair, or no combination listed on any venue.
+    /// Returns every problem found: a malformed asset, no venue, market or
+    /// asset, or no combination listed on any venue.
     pub fn build(self) -> anyhow::Result<Vec<Feed>> {
         let Self {
             venues,
             markets,
-            pairs,
+            assets,
             mut errors,
         } = self;
 
         for (what, empty) in [
             ("venue", venues.is_empty()),
             ("market", markets.is_empty()),
-            ("instrument", pairs.is_empty()),
+            ("instrument", assets.is_empty()),
         ] {
             if empty {
                 errors.push(format!("no {what} added"));
@@ -318,12 +304,12 @@ impl FeedsBuilder {
         let mut feeds = Vec::new();
         for &venue in &venues {
             for &market in &markets {
-                let instrument_ids: Vec<_> = pairs
+                let instrument_ids: Vec<_> = assets
                     .iter()
-                    .filter_map(|pair| {
-                        let id = venue.instrument_id(market, pair);
+                    .filter_map(|asset| {
+                        let id = venue.instrument_id(market, asset);
                         if id.is_none() {
-                            tracing::info!(%venue, %market, %pair, "not listed, skipped");
+                            tracing::info!(%venue, %market, %asset, "not listed, skipped");
                         }
                         id
                     })
@@ -364,57 +350,52 @@ mod tests {
         Venue::Hyperliquid,
     ];
 
-    fn id(venue: Venue, market: Market, pair: &str) -> Option<String> {
+    fn id(venue: Venue, market: Market, asset: &str) -> Option<String> {
         venue
-            .instrument_id(market, &pair.parse().unwrap())
+            .instrument_id(market, &asset.parse().unwrap())
             .map(|id| id.to_string())
     }
 
     #[test]
-    fn spells_pairs_per_venue_and_market() {
+    fn maps_an_asset_to_each_venue_usd_instrument() {
         use Market::{Futures, Spot};
         use Venue::{Binance, Bybit, Hyperliquid, Kraken, Okx};
         let cases = [
-            (Binance, Spot, "btc_usdt", Some("BTCUSDT.BINANCE")),
-            (Binance, Futures, "btc_usdt", Some("BTCUSDT-PERP.BINANCE")),
-            (Binance, Futures, "btc_usd", None),
-            (Bybit, Spot, "btc_usdt", Some("BTCUSDT-SPOT.BYBIT")),
-            (Bybit, Futures, "btc_usdt", Some("BTCUSDT-LINEAR.BYBIT")),
-            (Bybit, Futures, "btc_usd", None),
-            (Okx, Spot, "btc_usdt", Some("BTC-USDT.OKX")),
-            (Okx, Futures, "btc_usdt", Some("BTC-USDT-SWAP.OKX")),
-            (Okx, Futures, "btc_usd", None),
-            (Kraken, Spot, "btc_usd", Some("BTC/USD.KRAKEN")),
-            (Kraken, Futures, "btc_usd", Some("PF_XBTUSD.KRAKEN")),
-            (Kraken, Futures, "eth_usd", Some("PF_ETHUSD.KRAKEN")),
-            (Kraken, Futures, "btc_usdt", None),
-            (Hyperliquid, Spot, "btc_usdc", None),
+            (Binance, Spot, "btc", Some("BTCUSDT.BINANCE")),
+            (Binance, Futures, "btc", Some("BTCUSDT-PERP.BINANCE")),
+            (Bybit, Spot, "btc", Some("BTCUSDT-SPOT.BYBIT")),
+            (Bybit, Futures, "btc", Some("BTCUSDT-LINEAR.BYBIT")),
+            (Okx, Spot, "btc", Some("BTC-USDT.OKX")),
+            (Okx, Futures, "btc", Some("BTC-USDT-SWAP.OKX")),
+            (Kraken, Spot, "btc", Some("BTC/USD.KRAKEN")),
+            (Kraken, Futures, "btc", Some("PF_XBTUSD.KRAKEN")),
+            (Kraken, Futures, "eth", Some("PF_ETHUSD.KRAKEN")),
+            (Hyperliquid, Spot, "btc", None),
             (
                 Hyperliquid,
                 Futures,
-                "btc_usd",
+                "btc",
                 Some("BTC-USD-PERP.HYPERLIQUID"),
             ),
-            (Hyperliquid, Futures, "btc_usdt", None),
         ];
-        for (venue, market, pair, expected) in cases {
+        for (venue, market, asset, expected) in cases {
             assert_eq!(
-                id(venue, market, pair).as_deref(),
+                id(venue, market, asset).as_deref(),
                 expected,
-                "{venue} {market} {pair}"
+                "{venue} {market} {asset}"
             );
         }
     }
 
     #[test]
-    fn combines_venues_markets_and_pairs() {
+    fn combines_venues_markets_and_assets() {
         let feeds = FeedsBuilder::new()
             .add_venue(Venue::Binance)
             .add_venue(Venue::Bybit)
             .add_market(Market::Spot)
             .add_market(Market::Futures)
-            .add_instrument("btc_usdt")
-            .add_instrument("eth_usdt")
+            .add_instrument("btc")
+            .add_instrument("eth")
             .build()
             .unwrap();
         let clients: Vec<_> = feeds.iter().map(|f| f.client_id().to_string()).collect();
@@ -432,20 +413,39 @@ mod tests {
     }
 
     #[test]
-    fn skips_combinations_a_venue_does_not_list() {
-        let feeds = FeedsBuilder::new()
-            .add_venue(Venue::Kraken)
-            .add_venue(Venue::Hyperliquid)
-            .add_market(Market::Futures)
-            .add_instrument("btc_usdt")
-            .add_instrument("btc_usd")
-            .build()
-            .unwrap();
+    fn one_asset_covers_every_venue_perpetual() {
+        let mut builder = FeedsBuilder::new().add_market(Market::Futures);
+        for venue in ALL_VENUES {
+            builder = builder.add_venue(venue);
+        }
+        let feeds = builder.add_instrument("btc").build().unwrap();
         let ids: Vec<_> = feeds
             .iter()
             .flat_map(|f| f.instrument_ids().iter().map(ToString::to_string))
             .collect();
-        assert_eq!(ids, ["PF_XBTUSD.KRAKEN", "BTC-USD-PERP.HYPERLIQUID"]);
+        assert_eq!(
+            ids,
+            [
+                "BTCUSDT-PERP.BINANCE",
+                "BTCUSDT-LINEAR.BYBIT",
+                "BTC-USDT-SWAP.OKX",
+                "PF_XBTUSD.KRAKEN",
+                "BTC-USD-PERP.HYPERLIQUID",
+            ]
+        );
+    }
+
+    #[test]
+    fn skips_markets_a_venue_does_not_have() {
+        let feeds = FeedsBuilder::new()
+            .add_venue(Venue::Hyperliquid)
+            .add_market(Market::Spot)
+            .add_market(Market::Futures)
+            .add_instrument("btc")
+            .build()
+            .unwrap();
+        let clients: Vec<_> = feeds.iter().map(|f| f.client_id().to_string()).collect();
+        assert_eq!(clients, ["HYPERLIQUID-FUTURES"]);
     }
 
     #[test]
@@ -453,7 +453,7 @@ mod tests {
         let err = FeedsBuilder::new()
             .add_venue(Venue::Hyperliquid)
             .add_market(Market::Spot)
-            .add_instrument("btc_usdc")
+            .add_instrument("btc")
             .build()
             .unwrap_err()
             .to_string();
@@ -463,11 +463,11 @@ mod tests {
     #[test]
     fn reports_every_input_error() {
         let err = FeedsBuilder::new()
-            .add_instrument("btcusdt")
+            .add_instrument("btc_usdt")
             .build()
             .unwrap_err()
             .to_string();
-        assert!(err.contains("invalid pair \"btcusdt\""), "{err}");
+        assert!(err.contains("invalid asset \"btc_usdt\""), "{err}");
         assert!(err.contains("no venue added"), "{err}");
         assert!(err.contains("no market added"), "{err}");
     }
@@ -479,8 +479,8 @@ mod tests {
             .add_venue(Venue::Okx)
             .add_market(Market::Futures)
             .add_market(Market::Futures)
-            .add_instrument("btc_usdt")
-            .add_instrument("BTC_USDT")
+            .add_instrument("btc")
+            .add_instrument("BTC")
             .build()
             .unwrap();
         assert_eq!(subscriptions(&feeds).len(), 1);

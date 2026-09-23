@@ -14,7 +14,6 @@ async fn main() -> anyhow::Result<()> {
     tracing::subscriber::set_global_default(subscriber)?;
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "svp starting");
 
-    // BTC perpetuals everywhere: Kraken and Hyperliquid quote them in USD.
     let feeds = FeedsBuilder::new()
         .add_venue(Venue::Binance)
         .add_venue(Venue::Bybit)
@@ -22,8 +21,7 @@ async fn main() -> anyhow::Result<()> {
         .add_venue(Venue::Kraken)
         .add_venue(Venue::Hyperliquid)
         .add_market(Market::Futures)
-        .add_instrument("btc_usdt")
-        .add_instrument("btc_usd")
+        .add_instrument("btc")
         .build()?;
 
     let mut node = svp_core::node::build(&feeds)?;
