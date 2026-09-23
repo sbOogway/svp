@@ -1,13 +1,9 @@
 //! svp backend binary. Populated in milestones M1 and M2.
 
-use nautilus_model::identifiers::InstrumentId;
 use svp_core::venue::{
-    Feed,
-    binance::{BinanceFeed, BinanceMarket},
+    FeedsBuilder, binance::BinanceMarket, bybit::BybitMarket, kraken::KrakenMarket, okx::OkxMarket,
 };
 use tracing_subscriber::EnvFilter;
-
-const DEFAULT_INSTRUMENT_ID: &str = "BTCUSDT-PERP.BINANCE";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -20,12 +16,14 @@ async fn main() -> anyhow::Result<()> {
     tracing::subscriber::set_global_default(subscriber)?;
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "svp starting");
 
-    let instrument_id =
-        std::env::var("SVP_INSTRUMENT_ID").unwrap_or_else(|_| DEFAULT_INSTRUMENT_ID.to_string());
-    let feeds: Vec<Box<dyn Feed>> = vec![Box::new(BinanceFeed::new(
-        BinanceMarket::UsdM,
-        vec![InstrumentId::from(instrument_id.as_str())],
-    ))];
+    let feeds = FeedsBuilder::new()
+        .binance(BinanceMarket::UsdM, &["BTCUSDT-PERP.BINANCE"])
+        .binance(BinanceMarket::Spot, &["BTCUSDT.BINANCE"])
+        .bybit(BybitMarket::Linear, &["BTCUSDT-LINEAR.BYBIT"])
+        .okx(OkxMarket::Swap, &["BTC-USDT-SWAP.OKX"])
+        .kraken(KrakenMarket::Futures, &["PF_XBTUSD.KRAKEN"])
+        .hyperliquid(&["BTC-USD-PERP.HYPERLIQUID"])
+        .build()?;
 
     let mut node = svp_core::node::build(&feeds)?;
     node.run().await

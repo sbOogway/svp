@@ -6,7 +6,7 @@ use nautilus_binance::{
     config::{BinanceDataClientConfig, BinanceInstrumentProviderConfig, BinanceSpotMarketDataMode},
     factories::BinanceDataClientFactory,
 };
-use nautilus_model::identifiers::{ClientId, InstrumentId};
+use nautilus_model::identifiers::{ClientId, InstrumentId, Venue};
 
 use super::{DataClientSpec, Feed};
 
@@ -60,6 +60,10 @@ impl BinanceFeed {
 impl Feed for BinanceFeed {
     fn client_id(&self) -> ClientId {
         ClientId::from(self.market.client_name())
+    }
+
+    fn venue(&self) -> Venue {
+        Venue::from("BINANCE")
     }
 
     fn instrument_ids(&self) -> &[InstrumentId] {

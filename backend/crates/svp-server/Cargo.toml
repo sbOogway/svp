@@ -16,7 +16,6 @@ path = "src/main.rs"
 svp-core = { workspace = true }
 svp-protocol = { workspace = true }
 anyhow = { workspace = true }
-nautilus-model = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
