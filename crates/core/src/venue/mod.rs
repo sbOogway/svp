@@ -13,6 +13,8 @@ mod hyperliquid;
 mod kraken;
 mod okx;
 
+use std::num::NonZeroUsize;
+
 use nautilus_common::factories::{ClientConfig, DataClientFactory};
 use nautilus_model::identifiers::{self, ClientId, InstrumentId, Symbol};
 
@@ -66,6 +68,11 @@ macro_rules! named_enum {
 trait Exchange {
     fn symbol(&self, market: Market, coin: Coin) -> Option<Symbol>;
     fn data_client(&self, market: Market, instrument_ids: &[InstrumentId]) -> DataClientSpec;
+
+    /// Levels to request for the L2 book; `None` takes the adapter's default.
+    fn book_depth(&self, _market: Market) -> Option<NonZeroUsize> {
+        None
+    }
 }
 
 named_enum! {
@@ -129,7 +136,7 @@ pub struct DataClientSpec {
 pub struct Feed {
     venue: Venue,
     market: Market,
-    instrument_ids: Vec<InstrumentId>,
+    instruments: Vec<(Coin, InstrumentId)>,
 }
 
 impl Feed {
@@ -148,14 +155,14 @@ impl Feed {
         self.market
     }
 
-    pub fn instrument_ids(&self) -> &[InstrumentId] {
-        &self.instrument_ids
+    pub fn instrument_ids(&self) -> Vec<InstrumentId> {
+        self.instruments.iter().map(|&(_, id)| id).collect()
     }
 
     pub fn data_client(&self) -> DataClientSpec {
         self.venue
             .exchange()
-            .data_client(self.market, &self.instrument_ids)
+            .data_client(self.market, &self.instrument_ids())
     }
 }
 
@@ -163,6 +170,10 @@ impl Feed {
 pub struct Subscription {
     pub client_id: ClientId,
     pub instrument_id: InstrumentId,
+    pub venue: Venue,
+    pub market: Market,
+    pub coin: Coin,
+    pub book_depth: Option<NonZeroUsize>,
 }
 
 pub fn subscriptions(feeds: &[Feed]) -> Vec<Subscription> {
@@ -170,11 +181,16 @@ pub fn subscriptions(feeds: &[Feed]) -> Vec<Subscription> {
         .iter()
         .flat_map(|feed| {
             let client_id = feed.client_id();
-            feed.instrument_ids
+            let book_depth = feed.venue.exchange().book_depth(feed.market);
+            feed.instruments
                 .iter()
-                .map(move |&instrument_id| Subscription {
+                .map(move |&(coin, instrument_id)| Subscription {
                     client_id,
                     instrument_id,
+                    venue: feed.venue,
+                    market: feed.market,
+                    coin,
+                    book_depth,
                 })
         })
         .collect()
@@ -246,21 +262,21 @@ impl FeedsBuilder {
         let mut feeds = Vec::new();
         for &venue in &venues {
             for &market in &markets {
-                let instrument_ids: Vec<_> = coins
+                let instruments: Vec<_> = coins
                     .iter()
                     .filter_map(|&coin| {
                         let id = venue.instrument_id(market, coin);
                         if id.is_none() {
                             tracing::info!(%venue, %market, %coin, "not listed, skipped");
                         }
-                        id
+                        Some((coin, id?))
                     })
                     .collect();
-                if !instrument_ids.is_empty() {
+                if !instruments.is_empty() {
                     feeds.push(Feed {
                         venue,
                         market,
-                        instrument_ids,
+                        instruments,
                     });
                 }
             }
@@ -432,7 +448,7 @@ mod tests {
                 let feed = Feed {
                     venue,
                     market,
-                    instrument_ids: vec![],
+                    instruments: vec![],
                 };
                 assert!(seen.insert(feed.client_id()));
             }

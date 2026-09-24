@@ -16,6 +16,7 @@ nautilus-binance = { workspace = true }
 nautilus-bybit = { workspace = true }
 nautilus-coinbase = { workspace = true }
 nautilus-common = { workspace = true }
+nautilus-core = { workspace = true }
 nautilus-hyperliquid = { workspace = true }
 nautilus-kraken = { workspace = true }
 nautilus-live = { workspace = true }

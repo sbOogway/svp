@@ -6,4 +6,5 @@
 
 pub mod actor;
 pub mod node;
+pub mod unified;
 pub mod venue;

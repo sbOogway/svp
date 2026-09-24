@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use nautilus_bybit::{
     common::enums::BybitProductType, config::BybitDataClientConfig,
     factories::BybitDataClientFactory,
@@ -28,5 +30,9 @@ impl Exchange for Bybit {
             factory: Box::new(BybitDataClientFactory::new()),
             config: Box::new(config),
         }
+    }
+
+    fn book_depth(&self, _market: Market) -> Option<NonZeroUsize> {
+        NonZeroUsize::new(200)
     }
 }

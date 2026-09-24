@@ -4853,6 +4853,7 @@ dependencies = [
  "nautilus-bybit",
  "nautilus-coinbase",
  "nautilus-common",
+ "nautilus-core",
  "nautilus-hyperliquid",
  "nautilus-kraken",
  "nautilus-live",

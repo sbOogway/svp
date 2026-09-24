@@ -3,7 +3,8 @@ use nautilus_live::node::LiveNode;
 use nautilus_model::identifiers::TraderId;
 
 use crate::{
-    actor::TradeLogger,
+    actor::VolumeLogger,
+    unified::{self, SvpDataClientConfig, SvpDataClientFactory, Unifier},
     venue::{self, DataClientSpec, Feed},
 };
 
@@ -19,7 +20,15 @@ pub fn build(feeds: &[Feed]) -> anyhow::Result<LiveNode> {
         builder = builder.add_data_client(Some(feed.client_id().to_string()), factory, config)?;
     }
 
+    builder = builder.add_data_client(
+        Some(unified::VENUE.to_string()),
+        Box::new(SvpDataClientFactory),
+        Box::new(SvpDataClientConfig),
+    )?;
+
     let mut node = builder.build()?;
-    node.add_actor(TradeLogger::new(venue::subscriptions(feeds)))?;
+    let unified = unified::unify(&venue::subscriptions(feeds));
+    node.add_actor(Unifier::new(unified.clone()))?;
+    node.add_actor(VolumeLogger::new(unified))?;
     Ok(node)
 }

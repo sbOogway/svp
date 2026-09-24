@@ -1,149 +1,191 @@
+use std::collections::{BTreeMap, HashMap};
+
 use nautilus_common::{
-    actor::{DataActor, DataActorCore, data_actor::DataActorConfig},
+    actor::{DataActor, DataActorConfig, DataActorCore},
     nautilus_actor,
+    timer::TimeEvent,
 };
+use nautilus_core::{DurationNanos, UnixNanos};
 use nautilus_model::{
     data::TradeTick,
+    identifiers::{ActorId, InstrumentId},
     instruments::{Instrument, InstrumentAny},
-    types::Quantity,
+    types::{Quantity, quantity::QuantityRaw},
 };
 
-use crate::venue::Subscription;
+use crate::{
+    unified::{self, Unified, size_in_coins},
+    venue::Subscription,
+};
 
-/// Exists to prove the node connects and data flows; the aggregation actor
-/// (`SvpActor`) supersedes it.
+const MINUTE: DurationNanos = DurationNanos::from_secs(60);
+const TIMER: &str = "volume-log";
+/// Venue trades can arrive a little after their minute ends.
+const GRACE: DurationNanos = DurationNanos::from_secs(5);
+
+/// Logs, per minute, the volume of each unified instrument next to the
+/// volumes of its venues, counted from the venue trades directly: the two
+/// must match.
+///
+/// Venue trades are subscribed when the unified instrument is published,
+/// right as the [`Unifier`](crate::unified::Unifier) subscribes to them, and
+/// minutes are logged from the first whole one after that.
 #[derive(Debug)]
-pub struct TradeLogger {
+pub struct VolumeLogger {
     core: DataActorCore,
-    subscriptions: Vec<Subscription>,
+    unified: Vec<Unified>,
+    /// Minute start (by `ts_event`) to volume in coins per instrument.
+    minutes: BTreeMap<UnixNanos, HashMap<InstrumentId, QuantityRaw>>,
+    first_minute: HashMap<InstrumentId, UnixNanos>,
 }
 
-nautilus_actor!(TradeLogger);
+nautilus_actor!(VolumeLogger);
 
-impl TradeLogger {
+impl VolumeLogger {
     #[must_use]
-    pub fn new(subscriptions: Vec<Subscription>) -> Self {
+    pub fn new(unified: Vec<Unified>) -> Self {
         Self {
-            core: DataActorCore::new(DataActorConfig::default()),
-            subscriptions,
+            core: DataActorCore::new(DataActorConfig {
+                actor_id: Some(ActorId::from("VolumeLogger")),
+                ..Default::default()
+            }),
+            unified,
+            minutes: BTreeMap::new(),
+            first_minute: HashMap::new(),
+        }
+    }
+
+    fn unified_ids(&self) -> Vec<InstrumentId> {
+        self.unified.iter().map(|u| u.instrument_id).collect()
+    }
+
+    fn members(&self) -> Vec<Subscription> {
+        self.unified
+            .iter()
+            .flat_map(|u| u.members.clone())
+            .collect()
+    }
+
+    fn log_minute(&self, minute: UnixNanos, volumes: &HashMap<InstrumentId, QuantityRaw>) {
+        let time = minute.to_datetime_utc();
+        let volume = |id| volumes.get(&id).copied().unwrap_or(0);
+        for unified in &self.unified {
+            if self
+                .first_minute
+                .get(&unified.instrument_id)
+                .is_none_or(|&first| minute < first)
+            {
+                continue;
+            }
+            let total = volume(unified.instrument_id);
+            let venues: Vec<_> = unified
+                .members
+                .iter()
+                .map(|m| (m.venue, volume(m.instrument_id)))
+                .collect();
+            let sum: QuantityRaw = venues.iter().map(|&(_, v)| v).sum();
+            let venues: Vec<_> = venues
+                .iter()
+                .map(|(venue, v)| format!("{venue} {}", coins(*v)))
+                .collect();
+            let line = format!(
+                "{} {} volume {} = {} ({})",
+                unified.instrument_id,
+                time.strftime("%H:%M"),
+                coins(total),
+                coins(sum),
+                venues.join(", ")
+            );
+            if total == sum {
+                log::info!("{line}");
+            } else {
+                log::warn!("{line}: unified volume differs from the sum of its venues");
+            }
         }
     }
 }
 
-impl DataActor for TradeLogger {
+fn coins(raw: QuantityRaw) -> Quantity {
+    Quantity::from_raw(raw, 4)
+}
+
+impl DataActor for VolumeLogger {
     fn on_start(&mut self) -> anyhow::Result<()> {
-        // Route by client, not by venue: one venue can have several clients
-        // (Binance spot and futures), none of them named after the venue.
-        // Trades are subscribed in `on_instrument`, once the client has the
-        // instrument: some load only part of their venue's instruments on
-        // connect (Coinbase: spot only) and drop trades for the rest,
-        // including the recent trades Coinbase sends on subscribing.
-        for sub in self.subscriptions.clone() {
-            self.request_instrument(sub.instrument_id, None, None, Some(sub.client_id), None)?;
+        for id in self.unified_ids() {
+            self.subscribe_instrument(id, None, None);
+            self.subscribe_trades(id, None, None);
         }
+        self.clock()
+            .set_timer_ns(TIMER, MINUTE, None, None, None, None, None)?;
         Ok(())
     }
 
     fn on_instrument(&mut self, instrument: &InstrumentAny) -> anyhow::Result<()> {
-        let instrument_id = instrument.id();
-        let subs: Vec<_> = self
-            .subscriptions
+        let Some(unified) = self
+            .unified
             .iter()
-            .filter(|sub| sub.instrument_id == instrument_id)
+            .find(|u| u.instrument_id == instrument.id())
+        else {
+            return Ok(());
+        };
+        // Route by client, not by venue: one venue can have several clients
+        // (Binance spot and futures), none of them named after the venue.
+        // A venue instrument not loaded by now is left out of the unified
+        // instrument, and its client would drop trades for it.
+        let members: Vec<_> = unified
+            .members
+            .iter()
+            .filter(|m| self.cache().instrument(&m.instrument_id).is_some())
             .copied()
             .collect();
-        for sub in subs {
-            log::info!(
-                "subscribing to trades for {} on {}",
-                sub.instrument_id,
-                sub.client_id
-            );
+        let first = self.clock().timestamp_ns().floor(MINUTE) + MINUTE;
+        self.first_minute.insert(instrument.id(), first);
+        for sub in members {
             self.subscribe_trades(sub.instrument_id, Some(sub.client_id), None);
         }
         Ok(())
     }
 
     fn on_stop(&mut self) -> anyhow::Result<()> {
-        for sub in self.subscriptions.clone() {
+        for sub in self.members() {
             self.unsubscribe_trades(sub.instrument_id, Some(sub.client_id), None);
         }
-        log::info!("stopped TradeLogger");
+        for id in self.unified_ids() {
+            self.unsubscribe_trades(id, None, None);
+            self.unsubscribe_instrument(id, None, None);
+        }
         Ok(())
     }
 
-    fn on_trade(&mut self, tick: &TradeTick) -> anyhow::Result<()> {
-        let Some(instrument) = self.cache().instrument(&tick.instrument_id) else {
-            log::warn!("no instrument for {}, trade dropped", tick.instrument_id);
-            return Ok(());
+    fn on_trade(&mut self, trade: &TradeTick) -> anyhow::Result<()> {
+        let size = if trade.instrument_id.venue.as_str() == unified::VENUE {
+            trade.size
+        } else {
+            let Some(instrument) = self.cache().instrument(&trade.instrument_id) else {
+                log::warn!("no instrument for {}, trade dropped", trade.instrument_id);
+                return Ok(());
+            };
+            size_in_coins(trade.size, &instrument)
         };
-        log::info!(
-            "{} {:?} {} @ {} id={} ts_event={}",
-            tick.instrument_id,
-            tick.aggressor_side,
-            size_in_coins(tick, &instrument),
-            tick.price,
-            tick.trade_id,
-            tick.ts_event,
-        );
+        *self
+            .minutes
+            .entry(trade.ts_event.floor(MINUTE))
+            .or_default()
+            .entry(trade.instrument_id)
+            .or_default() += size.raw();
         Ok(())
     }
-}
 
-/// A trade's size in coins. Some venues count derivatives in contracts (an
-/// OKX or Coinbase BTC perp contract is 0.01 BTC); the instrument's
-/// multiplier is the contract size, and 1 where sizes are already in coins.
-pub fn size_in_coins(tick: &TradeTick, instrument: &InstrumentAny) -> Quantity {
-    tick.size * instrument.multiplier()
-}
-
-#[cfg(test)]
-mod tests {
-    use nautilus_model::{
-        enums::AggressorSide,
-        identifiers::{InstrumentId, Symbol, TradeId},
-        instruments::CryptoPerpetual,
-        types::{Currency, Price},
-    };
-
-    use super::*;
-
-    fn trade_of(size: &str, multiplier: &str) -> Quantity {
-        let instrument_id = InstrumentId::from("BTC-USDT-SWAP.OKX");
-        let instrument = CryptoPerpetual::builder()
-            .instrument_id(instrument_id)
-            .raw_symbol(Symbol::from("BTC-USDT-SWAP"))
-            .base_currency(Currency::BTC())
-            .quote_currency(Currency::USDT())
-            .settlement_currency(Currency::USDT())
-            .is_inverse(false)
-            .price_precision(1)
-            .size_precision(2)
-            .price_increment(Price::from("0.1"))
-            .size_increment(Quantity::from("0.01"))
-            .multiplier(Quantity::from(multiplier))
-            .ts_event(0.into())
-            .ts_init(0.into())
-            .build()
-            .unwrap();
-        let tick = TradeTick::new(
-            instrument_id,
-            Price::from("84000.0"),
-            Quantity::from(size),
-            AggressorSide::Buy,
-            TradeId::from("1"),
-            0.into(),
-            0.into(),
-        );
-        size_in_coins(&tick, &InstrumentAny::CryptoPerpetual(instrument))
-    }
-
-    #[test]
-    fn converts_contracts_to_coins() {
-        assert_eq!(trade_of("3", "0.01"), Quantity::from("0.03"));
-    }
-
-    #[test]
-    fn keeps_sizes_already_in_coins() {
-        assert_eq!(trade_of("0.25", "1"), Quantity::from("0.25"));
+    fn on_time_event(&mut self, event: &TimeEvent) -> anyhow::Result<()> {
+        if event.name != TIMER {
+            return Ok(());
+        }
+        let open = event.ts_event.saturating_sub(GRACE).floor(MINUTE);
+        let still_open = self.minutes.split_off(&open);
+        let closed = std::mem::replace(&mut self.minutes, still_open);
+        for (minute, volumes) in &closed {
+            self.log_minute(*minute, volumes);
+        }
+        Ok(())
     }
 }

@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use nautilus_model::identifiers::{InstrumentId, Symbol};
 use nautilus_okx::{
     common::enums::OKXInstrumentType, config::OKXDataClientConfig, factories::OKXDataClientFactory,
@@ -28,5 +30,9 @@ impl Exchange for Okx {
             factory: Box::new(OKXDataClientFactory::new()),
             config: Box::new(config),
         }
+    }
+
+    fn book_depth(&self, _market: Market) -> Option<NonZeroUsize> {
+        NonZeroUsize::new(400)
     }
 }

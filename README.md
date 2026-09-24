@@ -26,7 +26,7 @@ Requirements: [rustup](https://rustup.rs) (toolchain pinned in `rust-toolchain.t
 ./scripts/setup.sh     # installs git hooks
 make ci-fast           # fmt, clippy
 make ci                # + tests, audit  (what pre-push runs)
-cargo run              # streams BTC futures trades from every venue and logs them
+cargo run              # merges BTC perp trades and books from every venue into BTC-PERP.SVP, logs volume per minute
 ```
 
 Logging: Nautilus components log through the `log` crate, configured with
