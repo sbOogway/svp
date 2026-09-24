@@ -14,6 +14,7 @@ authors = ["Mattia Papaccioli (sbOogway)"]
 svp-wire = { path = "crates/wire" }
 svp-aggregator = { path = "crates/aggregator" }
 svp-transport = { path = "crates/transport" }
+svp-client = { path = "crates/client" }
 
 anyhow = "1"
 async-trait = "0.1"

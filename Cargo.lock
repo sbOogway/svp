@@ -4898,6 +4898,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "svp-client"
+version = "0.1.0"
+dependencies = [
+ "svp-transport",
+ "svp-wire",
+ "tokio",
+]
+
+[[package]]
 name = "svp-server"
 version = "0.1.0"
 dependencies = [

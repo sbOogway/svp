@@ -1,17 +1,16 @@
 //! Prints every message from a running `svp` server until Ctrl-C:
-//! `cargo run -p svp-transport --example tail [socket]`.
+//! `cargo run -p svp-client --example tail [socket]`.
 
 use std::path::PathBuf;
 
-use svp_transport::protocols::unix;
-use svp_wire::Subscription;
+use svp_client::{connect, default_path, wire::Subscription};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let path = std::env::args_os()
         .nth(1)
-        .map_or_else(unix::default_path, PathBuf::from);
-    let mut client = unix::connect(&path, "tail").await?;
+        .map_or_else(default_path, PathBuf::from);
+    let mut client = connect(&path, "tail").await?;
     for instrument in client.instruments() {
         println!("{instrument:?}");
     }
