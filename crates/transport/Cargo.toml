@@ -14,12 +14,14 @@ bytes = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
 rmp-serde = { workspace = true }
+serde = { workspace = true }
 tokio = { workspace = true, features = ["net"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+tokio = { workspace = true, features = ["io-util"] }
 
 [lints]
 workspace = true

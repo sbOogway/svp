@@ -48,6 +48,9 @@ impl Sink for LogSink {
                 }
             },
             Message::Resync { missed } => log::debug!("resync after {missed} missed"),
+            Message::Welcome { .. } | Message::Reject { .. } | Message::Goodbye { .. } => {
+                log::debug!("{message:?}");
+            }
         }
     }
 }
@@ -100,14 +103,39 @@ struct Shared {
 }
 
 impl Hub {
-    /// A snapshot of every book and a receiver of what comes after them.
-    /// The sink applies and broadcasts under the same lock, so the receiver
-    /// starts exactly where the snapshots end.
-    pub fn subscribe(&self) -> (Vec<Message>, broadcast::Receiver<Message>) {
+    /// A snapshot of each book `wants` names and a receiver of what comes
+    /// after them. The sink applies and broadcasts under the same lock, so
+    /// the receiver starts exactly where the snapshots end.
+    pub fn subscribe(
+        &self,
+        wants: impl Fn(&str) -> bool,
+    ) -> (Vec<Message>, broadcast::Receiver<Message>) {
         let shared = self.lock();
-        let snapshots = shared
-            .books
+        (shared.snapshots(wants), shared.tx.subscribe())
+    }
+
+    /// Snapshots for `rx` to pick more books up from, and how many messages
+    /// `rx` has queued from before them: updates among those are already in
+    /// the snapshots.
+    pub fn catch_up(
+        &self,
+        rx: &broadcast::Receiver<Message>,
+        wants: impl Fn(&str) -> bool,
+    ) -> (Vec<Message>, usize) {
+        let shared = self.lock();
+        (shared.snapshots(wants), rx.len())
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Shared> {
+        self.shared.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+impl Shared {
+    fn snapshots(&self, wants: impl Fn(&str) -> bool) -> Vec<Message> {
+        self.books
             .iter()
+            .filter(|(instrument, _)| wants(instrument))
             .map(|(instrument, (ts, book))| {
                 Message::Book(BookUpdate {
                     instrument: instrument.clone(),
@@ -115,12 +143,7 @@ impl Hub {
                     data: book.snapshot(),
                 })
             })
-            .collect();
-        (snapshots, shared.tx.subscribe())
-    }
-
-    fn lock(&self) -> MutexGuard<'_, Shared> {
-        self.shared.lock().unwrap_or_else(PoisonError::into_inner)
+            .collect()
     }
 }
 
@@ -166,7 +189,7 @@ pub(crate) mod tests {
     #[test]
     fn channel_sink_reaches_every_subscriber() {
         let (mut sink, hub) = ChannelSink::new(8);
-        let ((_, mut a), (_, mut b)) = (hub.subscribe(), hub.subscribe());
+        let ((_, mut a), (_, mut b)) = (hub.subscribe(|_| true), hub.subscribe(|_| true));
         let message = update(1, &[(BookSide::Ask, "101", "1")]);
         sink.send(&message);
         assert_eq!(a.try_recv().unwrap(), message);
@@ -180,7 +203,7 @@ pub(crate) mod tests {
         sink.send(&trade(2));
         sink.send(&update(3, &[(BookSide::Ask, "101", "2")]));
 
-        let (snapshots, mut rx) = hub.subscribe();
+        let (snapshots, mut rx) = hub.subscribe(|_| true);
         assert_eq!(
             snapshots,
             [Message::Book(BookUpdate {

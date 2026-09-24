@@ -1,5 +1,10 @@
-//! The data the svp server sends to its clients: trades, book updates and the
-//! [`Book`] both sides rebuild from them.
+//! What the svp server and its clients say to each other: trades, book
+//! updates and the [`Book`] both sides rebuild from them, and the connection
+//! scheme every transport carries the same way.
+//!
+//! A client opens with [`Request::Hello`]; the server answers
+//! [`Message::Welcome`] and streams what the client subscribed to, or
+//! [`Message::Reject`] and closes. Either side ends with a `Goodbye`.
 //!
 //! Plain serde types with no transport in them; `svp-transport` decides how
 //! they are encoded and carried.
@@ -26,6 +31,81 @@ pub enum Message {
     Resync {
         missed: u64,
     },
+    /// Accepts a [`Request::Hello`]; the server's logs know this client by
+    /// `session`.
+    Welcome {
+        session: u64,
+        version: Version,
+    },
+    /// Refuses a [`Request::Hello`], then the server closes.
+    Reject {
+        reason: String,
+    },
+    /// The server is closing the connection.
+    Goodbye {
+        reason: String,
+    },
+}
+
+/// What a client sends to the server.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Request {
+    /// The first frame of every connection.
+    Hello {
+        version: Version,
+        name: String,
+        subscriptions: Vec<Subscription>,
+    },
+    /// Adds to what the client receives; a book it newly receives starts
+    /// with a snapshot.
+    Subscribe { subscriptions: Vec<Subscription> },
+    /// Takes the kinds a subscription sets away from what the client
+    /// receives for its instrument. Taking them from every instrument does
+    /// not undo a subscription to one instrument.
+    Unsubscribe { subscriptions: Vec<Subscription> },
+    /// The client is closing the connection.
+    Goodbye { reason: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Subscription {
+    /// `None` for every instrument, including ones that appear later.
+    pub instrument: Option<String>,
+    pub trades: bool,
+    pub books: bool,
+}
+
+impl Subscription {
+    pub fn everything() -> Self {
+        Self {
+            instrument: None,
+            trades: true,
+            books: true,
+        }
+    }
+}
+
+/// The version of this crate's scheme. A minor bump only adds to it, so a
+/// server serves clients of its major and any minor up to its own.
+pub const PROTOCOL_VERSION: Version = Version { major: 1, minor: 0 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Version {
+    pub major: u16,
+    pub minor: u16,
+}
+
+impl Version {
+    pub fn serves(self, client: Self) -> bool {
+        self.major == client.major && client.minor <= self.minor
+    }
+}
+
+impl std::fmt::Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.major, self.minor)
+    }
 }
 
 /// Prices in USD, sizes in coins, timestamps in UNIX nanoseconds. Prices
@@ -190,6 +270,40 @@ mod tests {
             &Message::Resync { missed: 3 },
             r#"{"type":"resync","missed":3}"#,
         );
+    }
+
+    #[test]
+    fn handshake_on_the_wire() {
+        let hello = Request::Hello {
+            version: PROTOCOL_VERSION,
+            name: "tail".into(),
+            subscriptions: vec![Subscription {
+                instrument: Some("BTC-PERP.SVP".into()),
+                trades: true,
+                books: false,
+            }],
+        };
+        let json = r#"{"type":"hello","version":{"major":1,"minor":0},"name":"tail","subscriptions":[{"instrument":"BTC-PERP.SVP","trades":true,"books":false}]}"#;
+        assert_eq!(serde_json::to_string(&hello).unwrap(), json);
+        assert_eq!(serde_json::from_str::<Request>(json).unwrap(), hello);
+
+        roundtrip(
+            &Message::Welcome {
+                session: 7,
+                version: PROTOCOL_VERSION,
+            },
+            r#"{"type":"welcome","session":7,"version":{"major":1,"minor":0}}"#,
+        );
+    }
+
+    #[test]
+    fn a_server_serves_its_major_up_to_its_minor() {
+        let server = Version { major: 1, minor: 2 };
+        assert!(server.serves(Version { major: 1, minor: 0 }));
+        assert!(server.serves(Version { major: 1, minor: 2 }));
+        assert!(!server.serves(Version { major: 1, minor: 3 }));
+        assert!(!server.serves(Version { major: 0, minor: 2 }));
+        assert!(!server.serves(Version { major: 2, minor: 0 }));
     }
 
     #[test]
