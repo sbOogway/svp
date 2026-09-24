@@ -22,6 +22,8 @@ const BUILD_TIMER: &str = "unifier-build";
 /// instrument from those that arrived, so one failing venue doesn't hold
 /// back the others.
 const BUILD_TIMEOUT: DurationNanos = DurationNanos::from_secs(30);
+/// Levels per side of the merged book.
+const BOOK_DEPTH: usize = 100;
 
 /// Republishes the trades and books of each unified instrument's venues as
 /// the unified instrument's own.
@@ -109,6 +111,7 @@ impl Unifier {
             instrument_id,
             instrument.price_increment(),
             instrument.size_precision(),
+            BOOK_DEPTH,
         );
         self.built.insert(instrument_id, Built { instrument, book });
         for m in loaded {

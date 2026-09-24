@@ -11,10 +11,10 @@ use nautilus_model::{
 /// The L2 books of several venues summed per price bucket of the unified tick,
 /// kept up to date one venue batch at a time.
 ///
-/// Every venue sees a different depth, so the published book is truncated to
-/// the price range all venues with a live book cover: beyond it, the merged
-/// sizes would only count the deeper venues and look thin. The published book
-/// can be crossed, since venues' books overlap.
+/// The published book holds the best `depth` buckets per side, each summing
+/// whichever venues quote there: a shallow venue (Hyperliquid sends 20
+/// levels) only adds to the buckets it reaches. It can be crossed, since
+/// venues' books overlap.
 #[derive(Debug)]
 pub struct MergedBook {
     instrument_id: InstrumentId,
@@ -40,19 +40,20 @@ struct Ladder {
     /// Bucket price to the sum over venues.
     totals: BTreeMap<PriceRaw, QuantityRaw>,
     published: BTreeMap<PriceRaw, QuantityRaw>,
-    /// The bid floor or the ask ceiling of the published range.
+    depth: usize,
+    /// The deepest published bucket.
     bound: Option<PriceRaw>,
 }
 
 impl MergedBook {
-    pub fn new(instrument_id: InstrumentId, tick: Price, size_precision: u8) -> Self {
+    pub fn new(instrument_id: InstrumentId, tick: Price, size_precision: u8, depth: usize) -> Self {
         Self {
             instrument_id,
             tick: tick.raw(),
             price_precision: tick.precision,
             size_precision,
-            bids: Ladder::new(OrderSide::Buy),
-            asks: Ladder::new(OrderSide::Sell),
+            bids: Ladder::new(OrderSide::Buy, depth),
+            asks: Ladder::new(OrderSide::Sell, depth),
             open_snapshots: BTreeSet::new(),
             sequence: 0,
             ts_event: UnixNanos::default(),
@@ -109,8 +110,8 @@ impl MergedBook {
             self.ts_event = self.ts_event.max(last.ts_event);
         }
         let ts_event = self.ts_event;
-        let mut changes = self.bids.publish(self.tick, touched.0);
-        changes.extend(self.asks.publish(self.tick, touched.1));
+        let mut changes = self.bids.publish(touched.0);
+        changes.extend(self.asks.publish(touched.1));
         self.emit(&changes, ts_event, ts_init)
     }
 
@@ -164,9 +165,10 @@ struct Change {
 }
 
 impl Ladder {
-    fn new(side: OrderSide) -> Self {
+    fn new(side: OrderSide, depth: usize) -> Self {
         Self {
             side,
+            depth,
             venues: HashMap::new(),
             totals: BTreeMap::new(),
             published: BTreeMap::new(),
@@ -233,17 +235,13 @@ impl Ladder {
         touched.insert(bucket);
     }
 
-    /// The deepest price every venue with levels on this side reaches.
-    fn covered_bound(&self, tick: PriceRaw) -> Option<PriceRaw> {
-        let deepest = self.venues.values().filter_map(|levels| match self.side {
-            OrderSide::Buy => levels.keys().next(),
-            OrderSide::Sell => levels.keys().next_back(),
-        });
-        let deepest = deepest.map(|&price| self.bucket(price, tick));
+    fn depth_bound(&self) -> Option<PriceRaw> {
+        let deepest = self.depth.min(self.totals.len()).checked_sub(1)?;
         match self.side {
-            OrderSide::Buy => deepest.max(),
-            OrderSide::Sell => deepest.min(),
+            OrderSide::Buy => self.totals.keys().rev().nth(deepest),
+            OrderSide::Sell => self.totals.keys().nth(deepest),
         }
+        .copied()
     }
 
     fn is_visible(&self, bucket: PriceRaw) -> bool {
@@ -253,8 +251,8 @@ impl Ladder {
         })
     }
 
-    fn publish(&mut self, tick: PriceRaw, mut touched: BTreeSet<PriceRaw>) -> Vec<Change> {
-        let bound = self.covered_bound(tick);
+    fn publish(&mut self, mut touched: BTreeSet<PriceRaw>) -> Vec<Change> {
+        let bound = self.depth_bound();
         if bound != self.bound {
             // Buckets between the old and the new bound enter or leave the range.
             let range = match (self.bound, bound) {
@@ -349,9 +347,13 @@ mod tests {
 
     impl Harness {
         fn new() -> Self {
+            Self::with_depth(100)
+        }
+
+        fn with_depth(depth: usize) -> Self {
             let id = InstrumentId::from(UNIFIED);
             Self {
-                merged: MergedBook::new(id, Price::from("0.1"), 4),
+                merged: MergedBook::new(id, Price::from("0.1"), 4, depth),
                 book: OrderBook::new(id, nautilus_model::enums::BookType::L2_MBP),
             }
         }
@@ -460,23 +462,38 @@ mod tests {
     }
 
     #[test]
-    fn truncates_to_the_range_every_venue_covers() {
+    fn publishes_the_best_levels_up_to_its_depth() {
+        let mut h = Harness::with_depth(2);
+        h.apply(vec![bid(A, "99.0", "1"), bid(A, "98.0", "1")]);
+        assert_eq!(h.bids(), levels(&[("99.0", "1.0000"), ("98.0", "1.0000")]));
+
+        // A better bid pushes 98.0 out.
+        h.apply(vec![bid(B, "100.0", "1")]);
+        assert_eq!(h.bids(), levels(&[("100.0", "1.0000"), ("99.0", "1.0000")]));
+
+        // It leaves again: 98.0 comes back.
+        h.apply(vec![delta(
+            B,
+            BookAction::Delete,
+            OrderSide::Buy,
+            "100.0",
+            "0",
+        )]);
+        assert_eq!(h.bids(), levels(&[("99.0", "1.0000"), ("98.0", "1.0000")]));
+    }
+
+    #[test]
+    fn a_shallow_venue_adds_only_where_it_quotes() {
         let mut h = Harness::new();
         h.apply(vec![
             bid(A, "100.0", "1"),
             bid(A, "99.0", "1"),
             bid(A, "98.0", "1"),
         ]);
-        assert_eq!(h.bids().len(), 3);
-
-        h.apply(vec![bid(B, "100.0", "1"), bid(B, "99.0", "1")]);
-        assert_eq!(h.bids(), levels(&[("100.0", "2.0000"), ("99.0", "2.0000")]));
-
-        // B's book deepens: 98.0 comes back into range.
-        h.apply(vec![bid(B, "97.0", "1")]);
+        h.apply(vec![bid(B, "100.0", "1")]);
         assert_eq!(
             h.bids(),
-            levels(&[("100.0", "2.0000"), ("99.0", "2.0000"), ("98.0", "1.0000")])
+            levels(&[("100.0", "2.0000"), ("99.0", "1.0000"), ("98.0", "1.0000")])
         );
     }
 
@@ -507,11 +524,10 @@ mod tests {
         let mut h = Harness::new();
         h.apply(vec![bid(A, "100.0", "1"), bid(A, "98.0", "1")]);
         h.apply(vec![bid(B, "100.0", "1"), bid(B, "99.0", "1")]);
-        assert_eq!(h.bids().len(), 2);
+        assert_eq!(h.bids().len(), 3);
 
         let clear = OrderBookDelta::clear(InstrumentId::from(B), 0, 0.into(), 0.into());
         h.apply(vec![clear]);
-        // Only A is left, with its whole range.
         assert_eq!(h.bids(), levels(&[("100.0", "1.0000"), ("98.0", "1.0000")]));
     }
 
@@ -524,8 +540,8 @@ mod tests {
         h.apply(vec![ask(B, "100.3", "1"), ask(B, "102.0", "1")]);
         assert_eq!(h.book.best_bid_price(), Some(Price::from("100.2")));
         assert_eq!(h.book.best_ask_price(), Some(Price::from("100.1")));
-        assert_eq!(h.bids().len(), 3);
-        assert_eq!(h.asks().len(), 3);
+        assert_eq!(h.bids().len(), 4);
+        assert_eq!(h.asks().len(), 4);
     }
 
     #[test]
@@ -603,49 +619,34 @@ mod tests {
         delta(venue, action, side, &price, &quantity)
     }
 
-    /// The model's venues summed per bucket, within the range they all cover.
-    fn expected(model: &Model, side: OrderSide) -> Levels {
+    /// The model's venues summed per bucket, the best `depth` of them.
+    fn expected(model: &Model, side: OrderSide, depth: usize) -> Levels {
         let tick = Price::from("0.1").raw();
         let bucket = |p: PriceRaw| match side {
             OrderSide::Buy => p.div_euclid(tick) * tick,
             OrderSide::Sell => (p + tick - 1).div_euclid(tick) * tick,
         };
         let index = usize::from(side == OrderSide::Sell);
-        let deepest = model.values().filter_map(|venue| {
-            let prices = venue[index].keys();
-            match side {
-                OrderSide::Buy => prices.min(),
-                OrderSide::Sell => prices.max(),
-            }
-            .map(|&p| bucket(p))
-        });
-        let bound = match side {
-            OrderSide::Buy => deepest.max(),
-            OrderSide::Sell => deepest.min(),
-        };
-        let mut expected = Levels::new();
+        let mut summed = Levels::new();
         for (&price, &quantity) in model.values().flat_map(|venue| &venue[index]) {
-            let b = bucket(price);
-            let visible = bound.is_some_and(|bound| match side {
-                OrderSide::Buy => b >= bound,
-                OrderSide::Sell => b <= bound,
-            });
-            if visible {
-                *expected.entry(b).or_default() += quantity;
-            }
+            *summed.entry(bucket(price)).or_default() += quantity;
         }
-        expected
+        let best: Vec<_> = match side {
+            OrderSide::Buy => summed.into_iter().rev().take(depth).collect(),
+            OrderSide::Sell => summed.into_iter().take(depth).collect(),
+        };
+        best.into_iter().collect()
     }
 
     /// Random updates, deletes, clears and (split) snapshots from three
     /// venues, some off the unified grid: after every batch, the published
-    /// book must equal the venue books summed per bucket, within the range
-    /// every venue covers.
+    /// book must equal the best buckets of the venue books summed.
     #[test]
     fn matches_the_summed_venue_books_under_random_updates() {
         const VENUES: [&str; 3] = [A, B, "C-PERP.Z"];
+        const DEPTH: usize = 10;
         let mut rng = Rng(0x2545_f491_4f6c_dd1d);
-        let mut h = Harness::new();
+        let mut h = Harness::with_depth(DEPTH);
         let mut model = Model::new();
 
         for _ in 0..5_000 {
@@ -687,7 +688,11 @@ mod tests {
             h.apply(batch);
 
             for side in [OrderSide::Buy, OrderSide::Sell] {
-                assert_eq!(h.raw_levels(side), expected(&model, side), "{side:?}");
+                assert_eq!(
+                    h.raw_levels(side),
+                    expected(&model, side, DEPTH),
+                    "{side:?}"
+                );
             }
         }
     }
