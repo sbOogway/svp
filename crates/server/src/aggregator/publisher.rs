@@ -10,7 +10,7 @@ use nautilus_model::{
     enums::{AggressorSide, BookAction, BookType, OrderSide},
     identifiers::{ActorId, InstrumentId},
 };
-use svp_wire::{BookData, BookSide, BookUpdate, Message, Side, Trade};
+use svp_common::protocol::{self, BookData, BookSide, BookUpdate, Message, Side, Trade};
 
 use crate::aggregator::sink::Sink;
 
@@ -122,7 +122,7 @@ pub fn book_messages(deltas: &OrderBookDeltas) -> Vec<Message> {
             None => continue,
         };
         let size = match delta.action {
-            BookAction::Delete => svp_wire::Quantity::ZERO,
+            BookAction::Delete => protocol::Quantity::ZERO,
             _ => delta.order.size.as_decimal().into(),
         };
         levels.push((book_side, delta.order.price.as_decimal().into(), size));
@@ -161,11 +161,11 @@ mod tests {
         )
     }
 
-    fn px(s: &str) -> svp_wire::Price {
+    fn px(s: &str) -> protocol::Price {
         s.parse().unwrap()
     }
 
-    fn qty(s: &str) -> svp_wire::Quantity {
+    fn qty(s: &str) -> protocol::Quantity {
         s.parse().unwrap()
     }
 
@@ -284,14 +284,14 @@ mod tests {
             let unit = 10_i128.pow(u32::from(FIXED_PRECISION - precision));
             let raw = PRICE_RAW_MAX / unit * unit - unit;
             assert_eq!(
-                svp_wire::Price::from(Price::from_raw(raw, precision).as_decimal()).to_string(),
+                protocol::Price::from(Price::from_raw(raw, precision).as_decimal()).to_string(),
                 with_point(&(raw / unit).to_string(), precision),
                 "price at precision {precision}"
             );
             let unit = 10_u128.pow(u32::from(FIXED_PRECISION - precision));
             let raw = QUANTITY_RAW_MAX / unit * unit - unit;
             assert_eq!(
-                svp_wire::Quantity::from(Quantity::from_raw(raw, precision).as_decimal())
+                protocol::Quantity::from(Quantity::from_raw(raw, precision).as_decimal())
                     .to_string(),
                 with_point(&(raw / unit).to_string(), precision),
                 "size at precision {precision}"

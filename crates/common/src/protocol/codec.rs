@@ -1,5 +1,5 @@
-//! One [`svp_wire::Message`] or [`svp_wire::Request`] per frame, in
-//! `MessagePack`. Framing is the transport's job.
+//! One [`Message`](super::Message) or [`Request`](super::Request) per frame,
+//! in `MessagePack`. Framing is the transport's job.
 
 use bytes::Bytes;
 use serde::{Serialize, de::DeserializeOwned};
@@ -7,9 +7,9 @@ use serde::{Serialize, de::DeserializeOwned};
 pub use rmp_serde::decode::Error as DecodeError;
 
 pub fn encode(message: &impl Serialize) -> Bytes {
-    // Named: `svp_wire`'s internally tagged enums need field names on the wire.
+    // Named: the protocol's internally tagged enums need field names on the wire.
     rmp_serde::to_vec_named(message)
-        .expect("every svp_wire type is representable in MessagePack")
+        .expect("every protocol type is representable in MessagePack")
         .into()
 }
 
@@ -19,15 +19,17 @@ pub fn decode<T: DeserializeOwned>(frame: &[u8]) -> Result<T, DecodeError> {
 
 #[cfg(test)]
 mod tests {
-    use svp_wire::{BookData, BookSide, BookUpdate, Message, Side, Trade};
-
     use super::*;
+    use crate::protocol::{
+        BookData, BookSide, BookUpdate, Instrument, Market, Message, PROTOCOL_VERSION, Price,
+        Quantity, Side, Trade,
+    };
 
-    fn px(s: &str) -> svp_wire::Price {
+    fn px(s: &str) -> Price {
         s.parse().unwrap()
     }
 
-    fn qty(s: &str) -> svp_wire::Quantity {
+    fn qty(s: &str) -> Quantity {
         s.parse().unwrap()
     }
 
@@ -70,11 +72,11 @@ mod tests {
             Message::Resync { missed: 7 },
             Message::Welcome {
                 session: 1,
-                version: svp_wire::PROTOCOL_VERSION,
-                instruments: vec![svp_wire::Instrument {
+                version: PROTOCOL_VERSION,
+                instruments: vec![Instrument {
                     id: "BTC-PERP.SVP".into(),
                     coin: "BTC".into(),
-                    market: svp_wire::Market::Perp,
+                    market: Market::Perp,
                     venues: vec!["BINANCE".into()],
                 }],
             },

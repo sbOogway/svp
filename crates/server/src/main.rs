@@ -5,7 +5,7 @@ mod session;
 use std::{ffi::OsString, io, path::PathBuf};
 
 use anyhow::Context;
-use svp_transport::protocols::unix;
+use svp_common::unix;
 use tracing_subscriber::EnvFilter;
 
 use crate::{
@@ -88,7 +88,7 @@ fn socket_path(
 mod tests {
     use std::time::Duration;
 
-    use svp_wire::{BookData, BookSide, Message};
+    use svp_common::protocol::{BookData, BookSide, Message};
 
     use super::*;
     use crate::hub::tests::{ID, channel, px, qty, subscription, trade, update};

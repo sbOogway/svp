@@ -1,6 +1,6 @@
 [package]
-name = "svp-transport"
-description = "How frames move between the svp server and its clients"
+name = "svp-common"
+description = "What the svp server and its clients share: the protocol, and the transports that carry it"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,15 +9,16 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-svp-wire = { workspace = true }
 bytes = { workspace = true }
 rmp-serde = { workspace = true }
+rust_decimal = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["net"] }
 tokio-util = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 
 [lints]

@@ -6,7 +6,7 @@ use std::{
     sync::{Arc, Mutex, MutexGuard, PoisonError},
 };
 
-use svp_wire::{Book, BookUpdate, Instrument, Message};
+use svp_common::protocol::{Book, BookUpdate, Instrument, Message};
 use tokio::sync::broadcast;
 
 use crate::aggregator::sink::Sink;
@@ -111,7 +111,9 @@ impl Shared {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use svp_wire::{BookData, BookSide, Market, Price, Quantity, Side, Subscription, Trade};
+    use svp_common::protocol::{
+        BookData, BookSide, Market, Price, Quantity, Side, Subscription, Trade,
+    };
 
     use super::*;
 
