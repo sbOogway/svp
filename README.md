@@ -14,7 +14,7 @@ Requirements: [rustup](https://rustup.rs) (toolchain pinned in `rust-toolchain.t
 make ci-fast           # fmt, clippy
 make ci                # + tests, audit  (what pre-push runs)
 cargo run              # merges BTC perp trades and books from every venue into BTC-PERP.SVP, logs volume per minute
-cargo run -p svp-client --example tail   # prints what the running server streams
+cargo run -p svp-client --example mock_client   # prints what the running server streams
 ```
 
 The server listens on `$XDG_RUNTIME_DIR/svp.sock`; change it with `--socket PATH`
