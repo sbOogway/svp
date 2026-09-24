@@ -1,6 +1,6 @@
 [package]
-name = "svp-protocol"
-description = "Wire protocol shared between the svp server and app"
+name = "svp-wire"
+description = "Data types the svp server sends to its clients"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -14,7 +14,6 @@ path = "src/main.rs"
 
 [dependencies]
 svp-aggregator = { workspace = true }
-svp-protocol = { workspace = true }
 svp-transport = { workspace = true }
 anyhow = { workspace = true }
 tokio = { workspace = true }

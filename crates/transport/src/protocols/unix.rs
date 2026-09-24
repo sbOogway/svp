@@ -6,7 +6,7 @@ use std::{
 };
 
 use futures::{Stream, StreamExt};
-use svp_protocol::Message;
+use svp_wire::Message;
 use tokio::net::{UnixListener, UnixStream};
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
@@ -79,7 +79,7 @@ pub async fn connect(path: &Path) -> io::Result<impl Stream<Item = io::Result<Me
 mod tests {
     use std::time::Duration;
 
-    use svp_protocol::{BookData, BookSide};
+    use svp_wire::{BookData, BookSide};
 
     use super::*;
     use crate::sink::{

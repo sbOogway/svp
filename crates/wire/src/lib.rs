@@ -1,7 +1,8 @@
-//! Wire protocol shared between the svp server and app.
+//! The data the svp server sends to its clients: trades, book updates and the
+//! [`Book`] both sides rebuild from them.
 //!
-//! Plain serde types with no transport in them: the server can send them
-//! over WebSocket, SSE or anything else, as JSON or another serde format.
+//! Plain serde types with no transport in them; `svp-transport` decides how
+//! they are encoded and carried.
 
 use std::{cmp::Ordering, collections::BTreeMap};
 

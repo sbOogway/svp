@@ -8,7 +8,7 @@ use std::{
     sync::{Arc, Mutex, MutexGuard, PoisonError},
 };
 
-use svp_protocol::{Book, BookData, BookUpdate, Message, Side};
+use svp_wire::{Book, BookData, BookUpdate, Message, Side};
 use tokio::sync::broadcast;
 
 pub trait Sink: Debug {
@@ -126,7 +126,7 @@ impl Hub {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use svp_protocol::{BookSide, Trade};
+    use svp_wire::{BookSide, Trade};
 
     use super::*;
 

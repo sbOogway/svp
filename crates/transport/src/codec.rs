@@ -1,12 +1,12 @@
 //! One [`Message`] per frame, in `MessagePack`. Framing is the transport's job.
 
 use bytes::Bytes;
-use svp_protocol::Message;
+use svp_wire::Message;
 
 pub use rmp_serde::decode::Error as DecodeError;
 
 pub fn encode(message: &Message) -> Bytes {
-    // Named: the protocol's internally tagged enums need field names on the wire.
+    // Named: `svp_wire`'s internally tagged enums need field names on the wire.
     rmp_serde::to_vec_named(message)
         .expect("every Message is representable in MessagePack")
         .into()
@@ -18,7 +18,7 @@ pub fn decode(frame: &[u8]) -> Result<Message, DecodeError> {
 
 #[cfg(test)]
 mod tests {
-    use svp_protocol::{BookData, BookSide, BookUpdate, Side, Trade};
+    use svp_wire::{BookData, BookSide, BookUpdate, Side, Trade};
 
     use super::*;
 

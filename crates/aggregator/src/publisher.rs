@@ -1,4 +1,4 @@
-//! Turns the unified instruments' trades and books into protocol
+//! Turns the unified instruments' trades and books into wire
 //! [`Message`]s for the sinks.
 
 use nautilus_common::{
@@ -10,8 +10,8 @@ use nautilus_model::{
     enums::{AggressorSide, BookAction, BookType, OrderSide},
     identifiers::{ActorId, InstrumentId},
 };
-use svp_protocol::{BookData, BookSide, BookUpdate, Message, Side, Trade};
 use svp_transport::sink::Sink;
+use svp_wire::{BookData, BookSide, BookUpdate, Message, Side, Trade};
 
 /// Subscribes to the unified instruments and feeds their trades and book
 /// updates to the sinks.
