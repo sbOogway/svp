@@ -1,4 +1,4 @@
-//! A mock client for trying and testing the svp server; see `examples/tail.rs`.
+//! A mock client for trying and testing the svp server; see `examples/mock_client.rs`.
 
 pub use svp_transport::{
     client::Client,

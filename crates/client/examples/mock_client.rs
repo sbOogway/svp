@@ -1,5 +1,5 @@
 //! Prints every message from a running `svp` server until Ctrl-C:
-//! `cargo run -p svp-client --example tail [socket]`.
+//! `cargo run -p svp-client --example mock_client [socket]`.
 
 use std::path::PathBuf;
 
@@ -10,7 +10,7 @@ async fn main() -> std::io::Result<()> {
     let path = std::env::args_os()
         .nth(1)
         .map_or_else(default_path, PathBuf::from);
-    let mut client = connect(&path, "tail").await?;
+    let mut client = connect(&path, "mock-client").await?;
     for instrument in client.instruments() {
         println!("{instrument:?}");
     }
