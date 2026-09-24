@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# `cargo run` runs the server.
+default-members = ["crates/server"]
 
 [workspace.package]
 version = "0.1.0"

@@ -1,5 +1,5 @@
 //! Prints every message from a running `svp` server until Ctrl-C:
-//! `cargo run -p svp-client --example mock_client [socket]`.
+//! `cargo run -p svp-client --bin mock_client [socket]`.
 
 use std::path::PathBuf;
 
