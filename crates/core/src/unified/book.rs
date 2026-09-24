@@ -34,7 +34,7 @@ pub struct MergedBook {
 
 #[derive(Debug)]
 struct Ladder {
-    is_bid: bool,
+    side: OrderSide,
     /// Venue price level to size in coins.
     venues: HashMap<InstrumentId, BTreeMap<PriceRaw, QuantityRaw>>,
     /// Bucket price to the sum over venues.
@@ -51,8 +51,8 @@ impl MergedBook {
             tick: tick.raw(),
             price_precision: tick.precision,
             size_precision,
-            bids: Ladder::new(true),
-            asks: Ladder::new(false),
+            bids: Ladder::new(OrderSide::Buy),
+            asks: Ladder::new(OrderSide::Sell),
             open_snapshots: BTreeSet::new(),
             sequence: 0,
             ts_event: UnixNanos::default(),
@@ -164,9 +164,9 @@ struct Change {
 }
 
 impl Ladder {
-    fn new(is_bid: bool) -> Self {
+    fn new(side: OrderSide) -> Self {
         Self {
-            is_bid,
+            side,
             venues: HashMap::new(),
             totals: BTreeMap::new(),
             published: BTreeMap::new(),
@@ -178,10 +178,9 @@ impl Ladder {
     /// shows a better price than it quotes.
     fn bucket(&self, price: PriceRaw, tick: PriceRaw) -> PriceRaw {
         let floor = price.div_euclid(tick) * tick;
-        if self.is_bid || floor == price {
-            floor
-        } else {
-            floor + tick
+        match self.side {
+            OrderSide::Sell if floor != price => floor + tick,
+            OrderSide::Buy | OrderSide::Sell => floor,
         }
     }
 
@@ -236,28 +235,21 @@ impl Ladder {
 
     /// The deepest price every venue with levels on this side reaches.
     fn covered_bound(&self, tick: PriceRaw) -> Option<PriceRaw> {
-        let deepest = self.venues.values().filter_map(|levels| {
-            if self.is_bid {
-                levels.keys().next()
-            } else {
-                levels.keys().next_back()
-            }
+        let deepest = self.venues.values().filter_map(|levels| match self.side {
+            OrderSide::Buy => levels.keys().next(),
+            OrderSide::Sell => levels.keys().next_back(),
         });
         let deepest = deepest.map(|&price| self.bucket(price, tick));
-        if self.is_bid {
-            deepest.max()
-        } else {
-            deepest.min()
+        match self.side {
+            OrderSide::Buy => deepest.max(),
+            OrderSide::Sell => deepest.min(),
         }
     }
 
     fn is_visible(&self, bucket: PriceRaw) -> bool {
-        self.bound.is_some_and(|bound| {
-            if self.is_bid {
-                bucket >= bound
-            } else {
-                bucket <= bound
-            }
+        self.bound.is_some_and(|bound| match self.side {
+            OrderSide::Buy => bucket >= bound,
+            OrderSide::Sell => bucket <= bound,
         })
     }
 
@@ -291,11 +283,7 @@ impl Ladder {
                 None => self.published.remove(&price),
             };
             changes.push(Change {
-                side: if self.is_bid {
-                    OrderSide::Buy
-                } else {
-                    OrderSide::Sell
-                },
+                side: self.side,
                 action,
                 price,
                 size: desired.unwrap_or(0),
@@ -397,11 +385,10 @@ mod tests {
             self.book.asks(None).map(printed).collect()
         }
 
-        fn raw_levels(&self, is_bid: bool) -> BTreeMap<PriceRaw, QuantityRaw> {
-            let levels: Vec<_> = if is_bid {
-                self.book.bids(None).collect()
-            } else {
-                self.book.asks(None).collect()
+        fn raw_levels(&self, side: OrderSide) -> BTreeMap<PriceRaw, QuantityRaw> {
+            let levels: Vec<_> = match side {
+                OrderSide::Buy => self.book.bids(None).collect(),
+                OrderSide::Sell => self.book.asks(None).collect(),
             };
             levels
                 .into_iter()
@@ -617,25 +604,33 @@ mod tests {
     }
 
     /// The model's venues summed per bucket, within the range they all cover.
-    fn expected(model: &Model, is_bid: bool) -> Levels {
+    fn expected(model: &Model, side: OrderSide) -> Levels {
         let tick = Price::from("0.1").raw();
-        let bucket = |p: PriceRaw| {
-            if is_bid {
-                p.div_euclid(tick) * tick
-            } else {
-                (p + tick - 1).div_euclid(tick) * tick
-            }
+        let bucket = |p: PriceRaw| match side {
+            OrderSide::Buy => p.div_euclid(tick) * tick,
+            OrderSide::Sell => (p + tick - 1).div_euclid(tick) * tick,
         };
-        let side = usize::from(!is_bid);
+        let index = usize::from(side == OrderSide::Sell);
         let deepest = model.values().filter_map(|venue| {
-            let prices = venue[side].keys();
-            if is_bid { prices.min() } else { prices.max() }.map(|&p| bucket(p))
+            let prices = venue[index].keys();
+            match side {
+                OrderSide::Buy => prices.min(),
+                OrderSide::Sell => prices.max(),
+            }
+            .map(|&p| bucket(p))
         });
-        let bound = if is_bid { deepest.max() } else { deepest.min() };
+        let bound = match side {
+            OrderSide::Buy => deepest.max(),
+            OrderSide::Sell => deepest.min(),
+        };
         let mut expected = Levels::new();
-        for (&price, &quantity) in model.values().flat_map(|venue| &venue[side]) {
+        for (&price, &quantity) in model.values().flat_map(|venue| &venue[index]) {
             let b = bucket(price);
-            if bound.is_some_and(|bound| if is_bid { b >= bound } else { b <= bound }) {
+            let visible = bound.is_some_and(|bound| match side {
+                OrderSide::Buy => b >= bound,
+                OrderSide::Sell => b <= bound,
+            });
+            if visible {
                 *expected.entry(b).or_default() += quantity;
             }
         }
@@ -691,12 +686,8 @@ mod tests {
             };
             h.apply(batch);
 
-            for is_bid in [true, false] {
-                assert_eq!(
-                    h.raw_levels(is_bid),
-                    expected(&model, is_bid),
-                    "bids: {is_bid}"
-                );
+            for side in [OrderSide::Buy, OrderSide::Sell] {
+                assert_eq!(h.raw_levels(side), expected(&model, side), "{side:?}");
             }
         }
     }
