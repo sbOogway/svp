@@ -4848,6 +4848,7 @@ name = "svp-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "log",
  "nautilus-binance",
  "nautilus-bybit",

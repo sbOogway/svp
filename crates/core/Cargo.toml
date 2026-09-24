@@ -11,6 +11,7 @@ authors.workspace = true
 [dependencies]
 svp-protocol = { workspace = true }
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 log = { workspace = true }
 nautilus-binance = { workspace = true }
 nautilus-bybit = { workspace = true }
