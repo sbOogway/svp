@@ -1,11 +1,11 @@
 //! The client side of the svp protocol, and a mock client for trying and
 //! testing the server in `examples/mock_client.rs`.
 
-mod client;
+mod session;
 
 use std::{io, path::Path};
 
-pub use client::Client;
+pub use session::Client;
 pub use svp_common::{
     protocol,
     unix::{Connection, default_path},
