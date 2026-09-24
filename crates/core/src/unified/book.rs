@@ -26,6 +26,10 @@ pub struct MergedBook {
     /// Venues in the middle of a snapshot split over several batches.
     open_snapshots: BTreeSet<InstrumentId>,
     sequence: u64,
+    /// Venues' clocks and latencies differ, so their batches interleave out
+    /// of `ts_event` order; the merged book never goes back in time, or a
+    /// Nautilus `OrderBook` fed with it warns on every such batch.
+    ts_event: UnixNanos,
 }
 
 #[derive(Debug)]
@@ -51,6 +55,7 @@ impl MergedBook {
             asks: Ladder::new(false),
             open_snapshots: BTreeSet::new(),
             sequence: 0,
+            ts_event: UnixNanos::default(),
         }
     }
 
@@ -100,7 +105,10 @@ impl MergedBook {
             }
         }
 
-        let ts_event = deltas.deltas.last().map_or(ts_init, |d| d.ts_event);
+        if let Some(last) = deltas.deltas.last() {
+            self.ts_event = self.ts_event.max(last.ts_event);
+        }
+        let ts_event = self.ts_event;
         let mut changes = self.bids.publish(self.tick, touched.0);
         changes.extend(self.asks.publish(self.tick, touched.1));
         self.emit(&changes, ts_event, ts_init)
@@ -538,6 +546,18 @@ mod tests {
         let mut h = Harness::new();
         h.apply(vec![bid(A, "100.0", "1")]);
         assert!(h.apply(vec![bid(A, "100.0", "1")]).is_none());
+    }
+
+    #[test]
+    fn never_goes_back_in_time() {
+        let mut h = Harness::new();
+        let mut late = bid(A, "100.0", "1");
+        late.ts_event = 20.into();
+        let mut early = bid(B, "100.0", "1");
+        early.ts_event = 10.into();
+        h.apply(vec![late]);
+        let out = h.apply(vec![early]).unwrap();
+        assert_eq!(out.ts_event, UnixNanos::from(20));
     }
 
     #[test]
