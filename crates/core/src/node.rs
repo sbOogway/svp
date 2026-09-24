@@ -1,4 +1,4 @@
-use nautilus_common::enums::Environment;
+use nautilus_common::{enums::Environment, logging::config::LoggerConfig};
 use nautilus_live::node::LiveNode;
 use nautilus_model::identifiers::TraderId;
 
@@ -14,6 +14,10 @@ pub fn build(feeds: &[Feed]) -> anyhow::Result<LiveNode> {
     let mut builder = LiveNode::builder(TraderId::from("SVP-001"), Environment::Live)?
         .with_name("svp")
         .with_delay_post_stop_secs(1);
+    // The node ignores `NAUTILUS_LOG` unless it is passed in.
+    if std::env::var_os("NAUTILUS_LOG").is_some() {
+        builder = builder.with_logging(LoggerConfig::from_env()?);
+    }
 
     for feed in feeds {
         let DataClientSpec { factory, config } = feed.data_client();
