@@ -5,19 +5,6 @@ A monolithic crypto market-data platform: a Rust server built on
 many exchanges, aggregates them into enriched candles (buy/sell volume, delta,
 VWAP…), and streams them over WebSocket to a native [Iced](https://iced.rs) app.
 
-Status: **M1 — multi-venue trade-driven aggregation**. See the [milestones](https://github.com/sbOogway/svp/milestones)
-and the [architecture decisions](https://github.com/sbOogway/svp/wiki/Architecture) in the wiki.
-
-## Layout
-
-```
-crates/protocol     wire types shared by the server and the app
-crates/aggregator   Nautilus live node: venues merged into one instrument, published to sinks
-crates/server       axum REST + WebSocket server, binary `svp`
-scripts/            setup and git hooks
-prek.toml           git hooks = local CI (there is no hosted CI, by design)
-```
-
 ## Getting started
 
 Requirements: [rustup](https://rustup.rs) (toolchain pinned in `rust-toolchain.toml`), [prek](https://prek.j178.dev/installation/).
