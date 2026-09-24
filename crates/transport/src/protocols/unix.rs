@@ -84,7 +84,7 @@ mod tests {
     use super::*;
     use crate::sink::{
         ChannelSink, Sink as _,
-        tests::{trade, update},
+        tests::{px, qty, trade, update},
     };
 
     async fn next(messages: &mut (impl Stream<Item = io::Result<Message>> + Unpin)) -> Message {
@@ -100,7 +100,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("svp.sock");
         let (mut sink, hub) = ChannelSink::new(8);
-        sink.send(&update(1, vec![(BookSide::Bid, 100.0, 1.0)]));
+        sink.send(&update(1, &[(BookSide::Bid, "100", "1")]));
         let server = Server::bind(&path).await.unwrap();
         let task = tokio::spawn(server.run(hub));
 
@@ -111,7 +111,7 @@ mod tests {
         assert_eq!(
             snapshot.data,
             BookData::Snapshot {
-                bids: vec![(100.0, 1.0)],
+                bids: vec![(px("100"), qty("1"))],
                 asks: vec![],
             }
         );

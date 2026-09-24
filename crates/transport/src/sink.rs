@@ -126,13 +126,25 @@ impl Hub {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use svp_wire::{BookSide, Trade};
+    use svp_wire::{BookSide, Price, Quantity, Trade};
 
     use super::*;
 
     pub(crate) const ID: &str = "BTC-PERP.SVP";
 
-    pub(crate) fn update(ts: u64, levels: Vec<(BookSide, f64, f64)>) -> Message {
+    pub(crate) fn px(s: &str) -> Price {
+        s.parse().unwrap()
+    }
+
+    pub(crate) fn qty(s: &str) -> Quantity {
+        s.parse().unwrap()
+    }
+
+    pub(crate) fn update(ts: u64, levels: &[(BookSide, &str, &str)]) -> Message {
+        let levels = levels
+            .iter()
+            .map(|&(side, price, size)| (side, px(price), qty(size)))
+            .collect();
         Message::Book(BookUpdate {
             instrument: ID.into(),
             ts,
@@ -144,8 +156,8 @@ pub(crate) mod tests {
         Message::Trade(Trade {
             instrument: ID.into(),
             ts,
-            price: 100.0,
-            size: 1.0,
+            price: px("100"),
+            size: qty("1"),
             aggressor: Some(Side::Buy),
             id: ts.to_string(),
         })
@@ -155,7 +167,7 @@ pub(crate) mod tests {
     fn channel_sink_reaches_every_subscriber() {
         let (mut sink, hub) = ChannelSink::new(8);
         let ((_, mut a), (_, mut b)) = (hub.subscribe(), hub.subscribe());
-        let message = update(1, vec![(BookSide::Ask, 101.0, 1.0)]);
+        let message = update(1, &[(BookSide::Ask, "101", "1")]);
         sink.send(&message);
         assert_eq!(a.try_recv().unwrap(), message);
         assert_eq!(b.try_recv().unwrap(), message);
@@ -164,9 +176,9 @@ pub(crate) mod tests {
     #[test]
     fn a_late_subscriber_starts_from_snapshots() {
         let (mut sink, hub) = ChannelSink::new(8);
-        sink.send(&update(1, vec![(BookSide::Bid, 100.0, 1.0)]));
+        sink.send(&update(1, &[(BookSide::Bid, "100", "1")]));
         sink.send(&trade(2));
-        sink.send(&update(3, vec![(BookSide::Ask, 101.0, 2.0)]));
+        sink.send(&update(3, &[(BookSide::Ask, "101", "2")]));
 
         let (snapshots, mut rx) = hub.subscribe();
         assert_eq!(
@@ -175,8 +187,8 @@ pub(crate) mod tests {
                 instrument: ID.into(),
                 ts: 3,
                 data: BookData::Snapshot {
-                    bids: vec![(100.0, 1.0)],
-                    asks: vec![(101.0, 2.0)],
+                    bids: vec![(px("100"), qty("1"))],
+                    asks: vec![(px("101"), qty("2"))],
                 },
             })]
         );

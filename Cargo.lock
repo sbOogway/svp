@@ -4928,6 +4928,8 @@ dependencies = [
 name = "svp-wire"
 version = "0.1.0"
 dependencies = [
+ "rmp-serde",
+ "rust_decimal",
  "serde",
  "serde_json",
 ]

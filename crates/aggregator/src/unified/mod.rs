@@ -19,7 +19,7 @@ use nautilus_model::{
     data::TradeTick,
     identifiers::{InstrumentId, Symbol, TradeId},
     instruments::{CryptoPerpetual, CurrencyPair, Instrument, InstrumentAny},
-    types::{Currency, Price, Quantity, fixed::FIXED_PRECISION},
+    types::{Currency, Price, Quantity, fixed::FIXED_PRECISION, quantity::QuantityRaw},
 };
 pub use rates::{RateSource, UsdRate, rate_sources, usd_price};
 
@@ -178,13 +178,10 @@ pub fn unify_trade(
 }
 
 // A venue that joins after the unified instrument was built can count finer
-// than it: only then is a size rounded.
+// than it: only then is a size rounded, half up.
 fn with_size_precision(size: Quantity, precision: u8) -> Quantity {
-    if size.precision <= precision {
-        Quantity::from_raw(size.raw(), precision)
-    } else {
-        Quantity::new(size.as_f64(), precision)
-    }
+    let unit = QuantityRaw::pow(10, u32::from(FIXED_PRECISION - precision));
+    Quantity::from_raw((size.raw() + unit / 2) / unit * unit, precision)
 }
 
 /// A random UUID without its dashes, then the venue code: the 36 characters
@@ -342,5 +339,40 @@ mod tests {
             assert_eq!(code, venue.code());
         }
         assert_ne!(trade_id(Venue::Binance), trade_id(Venue::Binance));
+    }
+
+    #[test]
+    fn keeps_a_coarser_size_as_is() {
+        let size = with_size_precision(Quantity::from("1.25"), 4);
+        assert_eq!(size, Quantity::from("1.2500"));
+        assert_eq!(size.precision, 4);
+    }
+
+    #[test]
+    fn rounds_a_finer_size_half_up() {
+        let cases = [
+            ("0.00015", "0.0002"),
+            ("0.00014", "0.0001"),
+            ("0.00025", "0.0003"),
+            ("1.00005", "1.0001"),
+            ("0.00004", "0.0000"),
+        ];
+        for (size, rounded) in cases {
+            assert_eq!(
+                with_size_precision(Quantity::from(size), 4),
+                Quantity::from(rounded),
+                "{size}"
+            );
+        }
+    }
+
+    #[test]
+    fn rounds_without_a_float() {
+        // 1.0000000000000005 as a float is 1.0000000000000004.
+        let size = Quantity::from("1.0000000000000005");
+        assert_eq!(
+            with_size_precision(size, 15),
+            Quantity::from("1.000000000000001")
+        );
     }
 }
