@@ -350,7 +350,14 @@ impl DataActor for Unifier {
         ) else {
             return Ok(());
         };
-        let trade = unify_trade(trade, venue_instrument, &built.instrument, rate);
+        let venue = self
+            .unified(*unified_id)
+            .members
+            .iter()
+            .find(|m| m.instrument_id == trade.instrument_id)
+            .expect("unified_of maps members only")
+            .venue;
+        let trade = unify_trade(trade, venue, venue_instrument, &built.instrument, rate);
         log::debug!(
             "trade {} {:?} {} @ {} id={}",
             trade.instrument_id,

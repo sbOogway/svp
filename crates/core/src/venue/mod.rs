@@ -88,6 +88,18 @@ named_enum! {
 }
 
 impl Venue {
+    /// Three letters, for IDs that must stay short.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Binance => "BIN",
+            Self::Bybit => "BYB",
+            Self::Okx => "OKX",
+            Self::Kraken => "KRK",
+            Self::Coinbase => "CBS",
+            Self::Hyperliquid => "HYP",
+        }
+    }
+
     fn exchange(self) -> &'static dyn Exchange {
         match self {
             Self::Binance => &binance::Binance,
