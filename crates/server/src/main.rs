@@ -1,7 +1,10 @@
 use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::Context;
-use svp_aggregator::venue::{Coin, FeedsBuilder, Market, Venue};
+use svp_aggregator::{
+    unified,
+    venue::{self, Coin, FeedsBuilder, Market, Venue},
+};
 use svp_transport::{
     protocols::unix,
     sink::{ChannelSink, LogSink, Sink},
@@ -31,7 +34,11 @@ async fn main() -> anyhow::Result<()> {
         .add_instrument(Coin::BTC)
         .build()?;
 
-    let (channel, hub) = ChannelSink::new(4096);
+    let instruments = unified::unify(&venue::subscriptions(&feeds))
+        .iter()
+        .map(unified::Unified::describe)
+        .collect();
+    let (channel, hub) = ChannelSink::new(4096, instruments);
     let server = unix::Server::bind(&socket)
         .await
         .with_context(|| format!("binding {}", socket.display()))?;

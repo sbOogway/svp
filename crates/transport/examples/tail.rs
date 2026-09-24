@@ -11,7 +11,20 @@ async fn main() -> std::io::Result<()> {
     let path = std::env::args_os()
         .nth(1)
         .map_or_else(unix::default_path, PathBuf::from);
-    let mut client = unix::connect(&path, "tail", vec![Subscription::everything()]).await?;
+    let mut client = unix::connect(&path, "tail").await?;
+    for instrument in client.instruments() {
+        println!("{instrument:?}");
+    }
+    let everything = client
+        .instruments()
+        .iter()
+        .map(|instrument| Subscription {
+            instrument: instrument.id.clone(),
+            trades: true,
+            books: true,
+        })
+        .collect();
+    client.subscribe(everything).await?;
     loop {
         tokio::select! {
             message = client.recv() => match message {

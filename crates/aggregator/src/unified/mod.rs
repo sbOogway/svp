@@ -34,6 +34,28 @@ pub struct Unified {
     pub members: Vec<Subscription>,
 }
 
+impl Unified {
+    /// How the server offers this instrument to its clients.
+    pub fn describe(&self) -> svp_wire::Instrument {
+        let mut venues: Vec<String> = Vec::new();
+        for member in &self.members {
+            let venue = member.venue.as_str();
+            if !venues.iter().any(|v| v == venue) {
+                venues.push(venue.to_owned());
+            }
+        }
+        svp_wire::Instrument {
+            id: self.instrument_id.to_string(),
+            coin: self.members[0].coin.to_string(),
+            market: match self.market {
+                Market::Spot => svp_wire::Market::Spot,
+                Market::Futures => svp_wire::Market::Perp,
+            },
+            venues,
+        }
+    }
+}
+
 /// Groups venue subscriptions by coin and market, perps and spot apart.
 pub fn unify(subscriptions: &[Subscription]) -> Vec<Unified> {
     let mut unified: Vec<Unified> = Vec::new();
@@ -245,6 +267,27 @@ mod tests {
                 ("BTC-PERP.SVP".to_string(), 2),
                 ("ETH-PERP.SVP".to_string(), 2),
             ]
+        );
+    }
+
+    #[test]
+    fn describes_a_unified_instrument_by_its_members() {
+        let feeds = FeedsBuilder::new()
+            .add_venue(Venue::Binance)
+            .add_venue(Venue::Hyperliquid)
+            .add_market(Market::Futures)
+            .add_instrument(Coin::BTC)
+            .build()
+            .unwrap();
+        let unified = unify(&subscriptions(&feeds));
+        assert_eq!(
+            unified[0].describe(),
+            svp_wire::Instrument {
+                id: "BTC-PERP.SVP".into(),
+                coin: "BTC".into(),
+                market: svp_wire::Market::Perp,
+                venues: vec!["BINANCE".into(), "HYPERLIQUID".into()],
+            }
         );
     }
 

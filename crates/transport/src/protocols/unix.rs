@@ -5,7 +5,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use svp_wire::Subscription;
 use tokio::net::{UnixListener, UnixStream};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
@@ -72,14 +71,9 @@ impl Drop for Server {
     }
 }
 
-pub async fn connect(
-    path: &Path,
-    name: impl Into<String>,
-    subscriptions: Vec<Subscription>,
-) -> io::Result<Client<Connection>> {
+pub async fn connect(path: &Path, name: impl Into<String>) -> io::Result<Client<Connection>> {
     let stream = UnixStream::connect(path).await?;
-    let frames = Framed::new(stream, LengthDelimitedCodec::new());
-    Client::connect(frames, name, subscriptions).await
+    Client::connect(Framed::new(stream, LengthDelimitedCodec::new()), name).await
 }
 
 #[cfg(test)]
@@ -90,8 +84,8 @@ mod tests {
 
     use super::*;
     use crate::sink::{
-        ChannelSink, Sink as _,
-        tests::{px, qty, trade, update},
+        Sink as _,
+        tests::{ID, channel, px, qty, subscription, trade, update},
     };
 
     async fn next(client: &mut Client<Connection>) -> Message {
@@ -103,15 +97,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_client_receives_snapshots_then_live_messages() {
+    async fn a_client_subscribes_to_what_the_welcome_offers() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("svp.sock");
-        let (mut sink, hub) = ChannelSink::new(8);
+        let (mut sink, hub) = channel(8);
         sink.send(&update(1, &[(BookSide::Bid, "100", "1")]));
         let server = Server::bind(&path).await.unwrap();
         let task = tokio::spawn(server.run(hub));
 
-        let mut messages = connect(&path, "test", vec![Subscription::everything()])
+        let mut messages = connect(&path, "test").await.unwrap();
+        assert_eq!(messages.instruments()[0].id, ID);
+        messages
+            .subscribe(vec![subscription(ID, true, true)])
             .await
             .unwrap();
         let Message::Book(snapshot) = next(&mut messages).await else {

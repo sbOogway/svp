@@ -65,6 +65,15 @@ mod tests {
             Message::Welcome {
                 session: 1,
                 version: svp_wire::PROTOCOL_VERSION,
+                instruments: vec![svp_wire::Instrument {
+                    id: "BTC-PERP.SVP".into(),
+                    coin: "BTC".into(),
+                    market: svp_wire::Market::Perp,
+                    venues: vec!["BINANCE".into()],
+                }],
+            },
+            Message::Error {
+                reason: "unknown".into(),
             },
             Message::Reject {
                 reason: "no".into(),
