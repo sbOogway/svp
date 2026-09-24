@@ -20,10 +20,6 @@ use crate::{
 
 const MINUTE: DurationNanos = DurationNanos::from_secs(60);
 const TIMER: &str = "volume-log";
-/// How long after a minute ends it is logged. Minutes go by the venue's
-/// `ts_event`, and a trade at 12:00:59.9 can reach the node after 12:01:00;
-/// logged right away, the 12:00 line would miss it.
-const GRACE: DurationNanos = DurationNanos::from_secs(5);
 
 /// Logs, per minute, the volume of each unified instrument next to the
 /// volumes of its venues, counted from the venue trades directly: the two
@@ -35,7 +31,8 @@ const GRACE: DurationNanos = DurationNanos::from_secs(5);
 pub struct VolumeLogger {
     core: DataActorCore,
     unified: Vec<Unified>,
-    /// Minute start (by `ts_event`) to volume in coins per instrument.
+    /// Minute start, by when trades reached the node (`ts_init`), to volume
+    /// in coins per instrument. A minute is complete as soon as it is over.
     minutes: BTreeMap<UnixNanos, HashMap<InstrumentId, QuantityRaw>>,
     /// The first minute after subscribing, per unified instrument; earlier
     /// ones are not logged. The minute of the subscription has only its
@@ -174,7 +171,7 @@ impl DataActor for VolumeLogger {
         };
         *self
             .minutes
-            .entry(trade.ts_event.floor(MINUTE))
+            .entry(trade.ts_init.floor(MINUTE))
             .or_default()
             .entry(trade.instrument_id)
             .or_default() += size.raw();
@@ -185,7 +182,7 @@ impl DataActor for VolumeLogger {
         if event.name != TIMER {
             return Ok(());
         }
-        let open = event.ts_event.saturating_sub(GRACE).floor(MINUTE);
+        let open = event.ts_event.floor(MINUTE);
         let still_open = self.minutes.split_off(&open);
         let closed = std::mem::replace(&mut self.minutes, still_open);
         for (minute, volumes) in &closed {
