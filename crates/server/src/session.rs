@@ -346,10 +346,10 @@ mod tests {
     use tokio::io::DuplexStream;
     use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
-    use super::*;
-    use svp_aggregator::sink::Sink as _;
     use svp_client::Client;
 
+    use super::*;
+    use crate::aggregator::sink::Sink as _;
     use crate::hub::tests::{ID, OTHER, channel, px, qty, subscription, trade, update};
 
     type Frames = Framed<DuplexStream, LengthDelimitedCodec>;

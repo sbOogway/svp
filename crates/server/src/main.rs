@@ -1,18 +1,21 @@
+mod aggregator;
 mod hub;
 mod session;
 
 use std::{ffi::OsString, io, path::PathBuf};
 
 use anyhow::Context;
-use svp_aggregator::{
-    sink::{LogSink, Sink},
-    unified,
-    venue::{self, Coin, FeedsBuilder, Market, Venue},
-};
 use svp_transport::protocols::unix;
 use tracing_subscriber::EnvFilter;
 
-use crate::hub::{ChannelSink, Hub};
+use crate::{
+    aggregator::{
+        sink::{LogSink, Sink},
+        unified,
+        venue::{self, Coin, FeedsBuilder, Market, Venue},
+    },
+    hub::{ChannelSink, Hub},
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -53,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let sinks: Vec<Box<dyn Sink>> = vec![Box::new(LogSink), Box::new(channel)];
-    let mut node = svp_aggregator::node::build(&feeds, sinks)?;
+    let mut node = crate::aggregator::node::build(&feeds, sinks)?;
     node.run().await
 }
 

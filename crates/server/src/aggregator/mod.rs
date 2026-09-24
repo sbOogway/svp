@@ -3,7 +3,7 @@
 //! sinks. "Aggregation" here means merging venues, not building candles.
 //!
 //! The node is single-threaded (`Rc<RefCell>`, `!Send`): nothing in this
-//! crate does I/O from an actor; data leaves the node through channels.
+//! module does I/O from an actor; data leaves the node through channels.
 
 pub mod actor;
 pub mod node;

@@ -13,7 +13,7 @@ use nautilus_model::{
     types::{Quantity, quantity::QuantityRaw},
 };
 
-use crate::{
+use crate::aggregator::{
     unified::{self, Unified, size_in_coins},
     venue::Subscription,
 };
@@ -26,7 +26,7 @@ const TIMER: &str = "volume-log";
 /// must match.
 ///
 /// Venue trades are subscribed when the unified instrument is published,
-/// right as the [`Unifier`](crate::unified::Unifier) subscribes to them.
+/// right as the [`Unifier`](crate::aggregator::unified::Unifier) subscribes to them.
 #[derive(Debug)]
 pub struct VolumeLogger {
     core: DataActorCore,

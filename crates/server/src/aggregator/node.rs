@@ -2,7 +2,7 @@ use nautilus_common::{enums::Environment, logging::config::LoggerConfig};
 use nautilus_live::node::LiveNode;
 use nautilus_model::identifiers::TraderId;
 
-use crate::{
+use crate::aggregator::{
     actor::VolumeLogger,
     publisher::Publisher,
     sink::Sink,

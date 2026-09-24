@@ -6,9 +6,10 @@ use std::{
     sync::{Arc, Mutex, MutexGuard, PoisonError},
 };
 
-use svp_aggregator::sink::Sink;
 use svp_wire::{Book, BookUpdate, Instrument, Message};
 use tokio::sync::broadcast;
+
+use crate::aggregator::sink::Sink;
 
 /// Hands messages to other threads over a broadcast channel: the aggregator
 /// runs on one thread, client sessions on others. It also keeps every book, so a
