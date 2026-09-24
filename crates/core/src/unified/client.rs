@@ -1,5 +1,7 @@
 use std::{any::Any, cell::RefCell, rc::Rc};
 
+use async_trait::async_trait;
+
 use nautilus_common::{
     cache::CacheView,
     clients::DataClient,
@@ -21,8 +23,10 @@ use super::VENUE;
 #[derive(Debug)]
 pub struct SvpDataClient {
     client_id: ClientId,
+    is_connected: bool,
 }
 
+#[async_trait(?Send)]
 impl DataClient for SvpDataClient {
     fn client_id(&self) -> ClientId {
         self.client_id
@@ -48,12 +52,23 @@ impl DataClient for SvpDataClient {
         Ok(())
     }
 
+    // The node waits on these before stopping.
+    async fn connect(&mut self) -> anyhow::Result<()> {
+        self.is_connected = true;
+        Ok(())
+    }
+
+    async fn disconnect(&mut self) -> anyhow::Result<()> {
+        self.is_connected = false;
+        Ok(())
+    }
+
     fn is_connected(&self) -> bool {
-        true
+        self.is_connected
     }
 
     fn is_disconnected(&self) -> bool {
-        false
+        !self.is_connected
     }
 
     fn subscribe_instrument(&mut self, _cmd: SubscribeInstrument) -> anyhow::Result<()> {
@@ -103,6 +118,7 @@ impl DataClientFactory for SvpDataClientFactory {
     ) -> anyhow::Result<Box<dyn DataClient>> {
         Ok(Box::new(SvpDataClient {
             client_id: ClientId::new(name),
+            is_connected: false,
         }))
     }
 
