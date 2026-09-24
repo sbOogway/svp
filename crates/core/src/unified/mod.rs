@@ -153,7 +153,9 @@ pub fn build_instrument(
 }
 
 /// A venue trade as a trade of the unified instrument: price in USD, size
-/// in coins, the venue's side and timestamps, and a new ID.
+/// in coins, the venue's side, a new ID, and timestamped when it reached the
+/// node. Venue clocks and latencies differ, so venue timestamps would
+/// interleave out of order across venues.
 pub fn unify_trade(
     trade: &TradeTick,
     venue: Venue,
@@ -170,7 +172,7 @@ pub fn unify_trade(
         ),
         trade.aggressor_side,
         trade_id(venue),
-        trade.ts_event,
+        trade.ts_init,
         trade.ts_init,
     )
 }
@@ -326,7 +328,7 @@ mod tests {
         assert_eq!(out.size, Quantity::from("0.0300"));
         assert_eq!(out.aggressor_side, AggressorSide::Sell);
         assert!(out.trade_id.as_str().ends_with("-OKX"));
-        assert_eq!((out.ts_event, out.ts_init), (7.into(), 8.into()));
+        assert_eq!((out.ts_event, out.ts_init), (8.into(), 8.into()));
     }
 
     #[test]
