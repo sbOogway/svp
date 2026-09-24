@@ -144,7 +144,7 @@ impl Feed {
     /// spot and futures are both `BINANCE`), so subscriptions are routed by
     /// client, not by venue.
     pub fn client_id(&self) -> ClientId {
-        ClientId::from(format!("{}-{}", self.venue, self.market).as_str())
+        client_id(self.venue, self.market)
     }
 
     pub fn venue(&self) -> Venue {
@@ -164,6 +164,18 @@ impl Feed {
             .exchange()
             .data_client(self.market, &self.instrument_ids())
     }
+}
+
+pub fn client_id(venue: Venue, market: Market) -> ClientId {
+    ClientId::from(format!("{venue}-{market}").as_str())
+}
+
+pub fn data_client(
+    venue: Venue,
+    market: Market,
+    instrument_ids: &[InstrumentId],
+) -> DataClientSpec {
+    venue.exchange().data_client(market, instrument_ids)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

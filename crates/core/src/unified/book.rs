@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use super::UsdRate;
 use nautilus_core::UnixNanos;
 use nautilus_model::{
     data::{BookOrder, OrderBookDelta, OrderBookDeltas},
@@ -25,6 +26,8 @@ pub struct MergedBook {
     asks: Ladder,
     /// Venues in the middle of a snapshot split over several batches.
     open_snapshots: BTreeSet<InstrumentId>,
+    /// Venues quoting in something other than USD.
+    rates: HashMap<InstrumentId, UsdRate>,
     sequence: u64,
     /// Venues' clocks and latencies differ, so their batches interleave out
     /// of `ts_event` order; the merged book never goes back in time, or a
@@ -55,6 +58,7 @@ impl MergedBook {
             bids: Ladder::new(OrderSide::Buy, depth),
             asks: Ladder::new(OrderSide::Sell, depth),
             open_snapshots: BTreeSet::new(),
+            rates: HashMap::new(),
             sequence: 0,
             ts_event: UnixNanos::default(),
         }
@@ -73,6 +77,7 @@ impl MergedBook {
         ts_init: UnixNanos,
     ) -> Option<OrderBookDeltas> {
         let venue = deltas.instrument_id;
+        let rate = self.rate(venue);
         let mut touched = (BTreeSet::new(), BTreeSet::new());
 
         for delta in &deltas.deltas {
@@ -80,8 +85,10 @@ impl MergedBook {
             if delta.action == BookAction::Clear
                 || (is_snapshot && !self.open_snapshots.contains(&venue))
             {
-                self.bids.remove_venue(venue, self.tick, &mut touched.0);
-                self.asks.remove_venue(venue, self.tick, &mut touched.1);
+                self.bids
+                    .remove_venue(venue, self.tick, rate, &mut touched.0);
+                self.asks
+                    .remove_venue(venue, self.tick, rate, &mut touched.1);
             }
             if is_snapshot && !RecordFlag::F_LAST.matches(delta.flags) {
                 self.open_snapshots.insert(venue);
@@ -97,10 +104,12 @@ impl MergedBook {
             let price = delta.order.price.raw();
             match delta.order.side {
                 Some(OrderSide::Buy) => {
-                    self.bids.set(venue, price, size, self.tick, &mut touched.0);
+                    self.bids
+                        .set(venue, price, size, self.tick, rate, &mut touched.0);
                 }
                 Some(OrderSide::Sell) => {
-                    self.asks.set(venue, price, size, self.tick, &mut touched.1);
+                    self.asks
+                        .set(venue, price, size, self.tick, rate, &mut touched.1);
                 }
                 None => {}
             }
@@ -109,10 +118,41 @@ impl MergedBook {
         if let Some(last) = deltas.deltas.last() {
             self.ts_event = self.ts_event.max(last.ts_event);
         }
-        let ts_event = self.ts_event;
+        self.publish(touched, ts_init)
+    }
+
+    fn rate(&self, venue: InstrumentId) -> UsdRate {
+        self.rates.get(&venue).copied().unwrap_or(UsdRate::ONE)
+    }
+
+    /// Sets the USD rate of a venue's quote currency, moving its levels to
+    /// the buckets of their new USD prices.
+    pub fn set_rate(
+        &mut self,
+        venue: InstrumentId,
+        rate: UsdRate,
+        ts_init: UnixNanos,
+    ) -> Option<OrderBookDeltas> {
+        let old = self.rates.insert(venue, rate).unwrap_or(UsdRate::ONE);
+        if old == rate {
+            return None;
+        }
+        let mut touched = (BTreeSet::new(), BTreeSet::new());
+        self.bids
+            .rebucket(venue, self.tick, old, rate, &mut touched.0);
+        self.asks
+            .rebucket(venue, self.tick, old, rate, &mut touched.1);
+        self.publish(touched, ts_init)
+    }
+
+    fn publish(
+        &mut self,
+        touched: (BTreeSet<PriceRaw>, BTreeSet<PriceRaw>),
+        ts_init: UnixNanos,
+    ) -> Option<OrderBookDeltas> {
         let mut changes = self.bids.publish(touched.0);
         changes.extend(self.asks.publish(touched.1));
-        self.emit(&changes, ts_event, ts_init)
+        self.emit(&changes, self.ts_event, ts_init)
     }
 
     fn emit(
@@ -192,6 +232,7 @@ impl Ladder {
         price: PriceRaw,
         size: QuantityRaw,
         tick: PriceRaw,
+        rate: UsdRate,
         touched: &mut BTreeSet<PriceRaw>,
     ) {
         let levels = self.venues.entry(venue).or_default();
@@ -202,7 +243,7 @@ impl Ladder {
         }
         .unwrap_or(0);
         if old != size {
-            self.add_to_total(self.bucket(price, tick), old, size, touched);
+            self.add_to_total(self.bucket(rate.convert(price), tick), old, size, touched);
         }
     }
 
@@ -210,13 +251,41 @@ impl Ladder {
         &mut self,
         venue: InstrumentId,
         tick: PriceRaw,
+        rate: UsdRate,
         touched: &mut BTreeSet<PriceRaw>,
     ) {
         let Some(levels) = self.venues.remove(&venue) else {
             return;
         };
         for (price, size) in levels {
-            self.add_to_total(self.bucket(price, tick), size, 0, touched);
+            self.add_to_total(self.bucket(rate.convert(price), tick), size, 0, touched);
+        }
+    }
+
+    fn rebucket(
+        &mut self,
+        venue: InstrumentId,
+        tick: PriceRaw,
+        old: UsdRate,
+        new: UsdRate,
+        touched: &mut BTreeSet<PriceRaw>,
+    ) {
+        let Some(levels) = self.venues.get(&venue) else {
+            return;
+        };
+        let moves: Vec<_> = levels
+            .iter()
+            .map(|(&price, &size)| {
+                let from = self.bucket(old.convert(price), tick);
+                let to = self.bucket(new.convert(price), tick);
+                (from, to, size)
+            })
+            .collect();
+        for (from, to, size) in moves {
+            if from != to {
+                self.add_to_total(from, size, 0, touched);
+                self.add_to_total(to, 0, size, touched);
+            }
         }
     }
 
@@ -549,6 +618,41 @@ mod tests {
         let mut h = Harness::new();
         h.apply(vec![bid(A, "100.0", "1")]);
         assert!(h.apply(vec![bid(A, "100.0", "1")]).is_none());
+    }
+
+    fn usdt_at(bid: &str, ask: &str) -> UsdRate {
+        UsdRate::from_quote(&nautilus_model::data::QuoteTick::new(
+            InstrumentId::from("USDT/USD.KRAKEN"),
+            Price::from(bid),
+            Price::from(ask),
+            Quantity::from(1),
+            Quantity::from(1),
+            0.into(),
+            0.into(),
+        ))
+    }
+
+    #[test]
+    fn a_venue_rate_moves_its_levels_to_usd() {
+        let mut h = Harness::new();
+        let venue = InstrumentId::from(A);
+        h.merged
+            .set_rate(venue, usdt_at("0.998", "0.998"), 0.into());
+        h.apply(vec![bid(A, "1000.0", "1"), ask(A, "1001.0", "1")]);
+        h.apply(vec![bid(B, "998.0", "2")]);
+        assert_eq!(h.bids(), levels(&[("998.0", "3.0000")]));
+        assert_eq!(h.asks(), levels(&[("999.0", "1.0000")]));
+
+        let out = h
+            .merged
+            .set_rate(venue, usdt_at("0.999", "0.999"), 0.into())
+            .unwrap();
+        h.book.apply_deltas(&out).unwrap();
+        assert_eq!(
+            h.bids(),
+            levels(&[("999.0", "1.0000"), ("998.0", "2.0000")])
+        );
+        assert_eq!(h.asks(), levels(&[("1000.0", "1.0000")]));
     }
 
     #[test]

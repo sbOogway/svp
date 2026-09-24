@@ -9,6 +9,7 @@
 mod actor;
 mod book;
 mod client;
+mod rates;
 
 pub use actor::Unifier;
 pub use book::MergedBook;
@@ -19,6 +20,7 @@ use nautilus_model::{
     instruments::{CryptoPerpetual, CurrencyPair, Instrument, InstrumentAny},
     types::{Currency, Price, Quantity, fixed::FIXED_PRECISION},
 };
+pub use rates::{RateSource, UsdRate, rate_sources, usd_price};
 
 use crate::venue::{Market, Subscription};
 
@@ -149,16 +151,17 @@ pub fn build_instrument(
     Ok(instrument)
 }
 
-/// A venue trade as a trade of the unified instrument: size in coins, the
-/// venue's price, side and timestamps, and an ID unique across venues.
+/// A venue trade as a trade of the unified instrument: price in USD, size
+/// in coins, the venue's side and timestamps, and an ID unique across venues.
 pub fn unify_trade(
     trade: &TradeTick,
     venue_instrument: &InstrumentAny,
     unified: &InstrumentAny,
+    rate: UsdRate,
 ) -> TradeTick {
     TradeTick::new(
         unified.id(),
-        with_price_precision(trade.price, unified.price_precision()),
+        usd_price(trade.price, rate, unified.price_precision()),
         with_size_precision(
             size_in_coins(trade.size, venue_instrument),
             unified.size_precision(),
@@ -170,16 +173,8 @@ pub fn unify_trade(
     )
 }
 
-// A venue that joins after the unified instrument was built can quote finer
-// than it: only then is a value rounded.
-fn with_price_precision(price: Price, precision: u8) -> Price {
-    if price.precision <= precision {
-        Price::from_raw(price.raw(), precision)
-    } else {
-        Price::new(price.as_f64(), precision)
-    }
-}
-
+// A venue that joins after the unified instrument was built can count finer
+// than it: only then is a size rounded.
 fn with_size_precision(size: Quantity, precision: u8) -> Quantity {
     if size.precision <= precision {
         Quantity::from_raw(size.raw(), precision)
@@ -331,7 +326,7 @@ mod tests {
             7.into(),
             8.into(),
         );
-        let out = unify_trade(&trade, &okx, &unified);
+        let out = unify_trade(&trade, &okx, &unified, UsdRate::ONE);
         assert_eq!(out.instrument_id, InstrumentId::from("BTC-PERP.SVP"));
         assert_eq!(out.price, Price::from("84000.1"));
         assert_eq!(out.size, Quantity::from("0.0300"));

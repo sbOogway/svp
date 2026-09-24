@@ -5,7 +5,7 @@ use nautilus_model::identifiers::TraderId;
 use crate::{
     actor::VolumeLogger,
     unified::{self, SvpDataClientConfig, SvpDataClientFactory, Unifier},
-    venue::{self, DataClientSpec, Feed},
+    venue::{self, DataClientSpec, Feed, Market, Venue},
 };
 
 /// Building the node initializes Nautilus logging, which registers the global
@@ -19,9 +19,23 @@ pub fn build(feeds: &[Feed]) -> anyhow::Result<LiveNode> {
         builder = builder.with_logging(LoggerConfig::from_env()?);
     }
 
+    let mut builder_clients = Vec::new();
     for feed in feeds {
         let DataClientSpec { factory, config } = feed.data_client();
         builder = builder.add_data_client(Some(feed.client_id().to_string()), factory, config)?;
+    }
+
+    // USD rates of the stablecoins venues quote in.
+    for source in unified::rate_sources() {
+        let has_client = feeds.iter().any(|f| f.client_id() == source.client_id)
+            || builder_clients.contains(&source.client_id);
+        if !has_client {
+            let DataClientSpec { factory, config } =
+                venue::data_client(Venue::Kraken, Market::Spot, &[source.instrument_id]);
+            builder =
+                builder.add_data_client(Some(source.client_id.to_string()), factory, config)?;
+            builder_clients.push(source.client_id);
+        }
     }
 
     builder = builder.add_data_client(
