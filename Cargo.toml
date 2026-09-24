@@ -13,9 +13,12 @@ authors = ["Mattia Papaccioli (sbOogway)"]
 [workspace.dependencies]
 svp-protocol = { path = "crates/protocol" }
 svp-aggregator = { path = "crates/aggregator" }
+svp-transport = { path = "crates/transport" }
 
 anyhow = "1"
 async-trait = "0.1"
+bytes = "1"
+futures = "0.3"
 log = "0.4"
 # Nautilus is pinned exactly: its Rust API changes between the ~biweekly releases.
 nautilus-binance = "=0.64.0"
@@ -28,10 +31,13 @@ nautilus-kraken = "=0.64.0"
 nautilus-live = "=0.64.0"
 nautilus-model = "=0.64.0"
 nautilus-okx = "=0.64.0"
+rmp-serde = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tempfile = "3"
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "signal", "time"] }
+tokio-util = { version = "0.7", features = ["codec"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 

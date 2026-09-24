@@ -17,6 +17,11 @@ pub struct StreamId(pub String);
 pub enum Message {
     Trade(Trade),
     Book(BookUpdate),
+    /// The client fell behind and `missed` messages were dropped. A snapshot
+    /// of every book follows; trades in the gap are lost.
+    Resync {
+        missed: u64,
+    },
 }
 
 /// Prices in USD, sizes in coins, timestamps in UNIX nanoseconds.
@@ -182,6 +187,14 @@ mod tests {
                 },
             }),
             r#"{"type":"book","instrument":"BTC-PERP.SVP","ts":2,"kind":"update","levels":[["bid",83470.9,0.4],["ask",83472.0,0.0]]}"#,
+        );
+    }
+
+    #[test]
+    fn resync_on_the_wire() {
+        roundtrip(
+            &Message::Resync { missed: 3 },
+            r#"{"type":"resync","missed":3}"#,
         );
     }
 

@@ -7,6 +7,6 @@
 
 pub mod actor;
 pub mod node;
-pub mod sink;
+pub mod publisher;
 pub mod unified;
 pub mod venue;

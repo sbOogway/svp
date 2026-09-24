@@ -1,8 +1,5 @@
-//! Where unified data goes once it leaves the node: the [`Publisher`] turns
-//! it into protocol [`Message`]s and hands them to each [`Sink`]. A transport
-//! is a sink, or reads from [`ChannelSink`]; the node doesn't know which.
-
-use std::fmt::Debug;
+//! Turns the unified instruments' trades and books into protocol
+//! [`Message`]s for the sinks.
 
 use nautilus_common::{
     actor::{DataActor, DataActorConfig, DataActorCore},
@@ -14,70 +11,7 @@ use nautilus_model::{
     identifiers::{ActorId, InstrumentId},
 };
 use svp_protocol::{BookData, BookSide, BookUpdate, Message, Side, Trade};
-use tokio::sync::broadcast;
-
-pub trait Sink: Debug {
-    fn send(&mut self, message: &Message);
-}
-
-/// Logs every message at debug level.
-#[derive(Debug, Default)]
-pub struct LogSink;
-
-impl Sink for LogSink {
-    fn send(&mut self, message: &Message) {
-        match message {
-            Message::Trade(t) => log::debug!(
-                "trade {} {} {} @ {} id={}",
-                t.instrument,
-                match t.aggressor {
-                    Some(Side::Buy) => "buy",
-                    Some(Side::Sell) => "sell",
-                    None => "-",
-                },
-                t.size,
-                t.price,
-                t.id
-            ),
-            Message::Book(b) => match &b.data {
-                BookData::Snapshot { bids, asks } => log::debug!(
-                    "book {} snapshot, {} bids, {} asks",
-                    b.instrument,
-                    bids.len(),
-                    asks.len()
-                ),
-                BookData::Update { levels } => {
-                    for (side, price, size) in levels {
-                        log::debug!("book {} {side:?} {price} {size}", b.instrument);
-                    }
-                }
-            },
-        }
-    }
-}
-
-/// Hands messages to other threads over a broadcast channel: the node runs
-/// on one thread, a transport usually on others.
-#[derive(Debug)]
-pub struct ChannelSink {
-    tx: broadcast::Sender<Message>,
-}
-
-impl ChannelSink {
-    /// The sink, and a sender to subscribe receivers from. A receiver that
-    /// falls more than `capacity` messages behind loses the oldest ones.
-    pub fn new(capacity: usize) -> (Self, broadcast::Sender<Message>) {
-        let (tx, _) = broadcast::channel(capacity);
-        (Self { tx: tx.clone() }, tx)
-    }
-}
-
-impl Sink for ChannelSink {
-    fn send(&mut self, message: &Message) {
-        // Fails only while nobody is subscribed.
-        let _ = self.tx.send(message.clone());
-    }
-}
+use svp_transport::sink::Sink;
 
 /// Subscribes to the unified instruments and feeds their trades and book
 /// updates to the sinks.
@@ -294,15 +228,5 @@ mod tests {
             book_messages(&deltas),
             [empty, update(vec![(BookSide::Bid, 100.0, 1.0)])]
         );
-    }
-
-    #[test]
-    fn channel_sink_reaches_every_subscriber() {
-        let (mut sink, tx) = ChannelSink::new(8);
-        let (mut a, mut b) = (tx.subscribe(), tx.subscribe());
-        let message = update(vec![(BookSide::Ask, 101.0, 1.0)]);
-        sink.send(&message);
-        assert_eq!(a.try_recv().unwrap(), message);
-        assert_eq!(b.try_recv().unwrap(), message);
     }
 }

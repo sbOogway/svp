@@ -1,6 +1,6 @@
 [package]
 name = "svp-server"
-description = "svp server binary: REST + WebSocket server"
+description = "svp server binary: runs the aggregator and serves clients over a Unix socket"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 svp-aggregator = { workspace = true }
 svp-protocol = { workspace = true }
+svp-transport = { workspace = true }
 anyhow = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
