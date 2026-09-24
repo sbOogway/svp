@@ -178,7 +178,9 @@ where
                         let subscriptions = offered(hub, frames, subscriptions).await?;
                         let before = filter.clone();
                         filter.add(&subscriptions);
-                        tracing::debug!(?subscriptions, "subscribed");
+                        if !subscriptions.is_empty() {
+                            tracing::info!("subscribed to {}", describe(&subscriptions));
+                        }
                         let snapshots = queue.catch_up(hub, &rx, before, &filter);
                         send_all(frames, &snapshots).await?;
                     }
@@ -186,7 +188,9 @@ where
                         let subscriptions = offered(hub, frames, subscriptions).await?;
                         filter.remove(&subscriptions);
                         queue.remove(&subscriptions);
-                        tracing::debug!(?subscriptions, "unsubscribed");
+                        if !subscriptions.is_empty() {
+                            tracing::info!("unsubscribed from {}", describe(&subscriptions));
+                        }
                     }
                     Ok(Request::Goodbye { reason }) => return Ok(End::Goodbye(reason)),
                     Ok(Request::Hello { .. }) => {
@@ -215,10 +219,24 @@ where
     if !unknown.is_empty() {
         let ids: Vec<_> = unknown.iter().map(|s| s.instrument.as_str()).collect();
         let reason = format!("unknown instruments: {}", ids.join(", "));
-        tracing::debug!("{reason}");
+        tracing::info!("{reason}");
         frames.send(encode(&Message::Error { reason })).await?;
     }
     Ok(offered)
+}
+
+/// `BTC-PERP.SVP trades+books, ETH-PERP.SVP trades`
+fn describe(subscriptions: &[Subscription]) -> String {
+    let each = subscriptions.iter().map(|s| {
+        let kinds = match (s.trades, s.books) {
+            (true, true) => "trades+books",
+            (true, false) => "trades",
+            (false, true) => "books",
+            (false, false) => "nothing",
+        };
+        format!("{} {kinds}", s.instrument)
+    });
+    each.collect::<Vec<_>>().join(", ")
 }
 
 async fn send_all<T>(frames: &mut T, messages: &[Message]) -> io::Result<()>
@@ -450,6 +468,18 @@ mod tests {
         assert_eq!(
             next(&mut client).await,
             update(3, &[(BookSide::Ask, "101", "1")])
+        );
+    }
+
+    #[test]
+    fn subscriptions_are_logged_by_instrument_and_kind() {
+        let subscriptions = [
+            subscription(ID, true, true),
+            subscription(OTHER, true, false),
+        ];
+        assert_eq!(
+            describe(&subscriptions),
+            "BTC-PERP.SVP trades+books, ETH-PERP.SVP trades"
         );
     }
 
