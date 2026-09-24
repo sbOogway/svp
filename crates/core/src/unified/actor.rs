@@ -8,28 +8,33 @@ use nautilus_common::{
 };
 use nautilus_core::DurationNanos;
 use nautilus_model::{
-    data::{OrderBookDeltas, TradeTick},
+    data::{OrderBookDeltas, QuoteTick, TradeTick},
     enums::{BookType, OrderSide},
     identifiers::{ActorId, InstrumentId},
     instruments::{Instrument, InstrumentAny},
+    types::Currency,
 };
 
-use super::{MergedBook, Unified, build_instrument, unify_trade};
+use super::{
+    MergedBook, RateSource, Unified, UsdRate, build_instrument, rate_sources, unify_trade,
+};
 use crate::venue::Subscription;
 
 const BUILD_TIMER: &str = "unifier-build";
-/// How long to wait for every venue instrument before building a unified
-/// instrument from those that arrived, so one failing venue doesn't hold
-/// back the others.
+/// How long to wait for every venue instrument and USD rate before building
+/// a unified instrument from the venues that are ready, so one failing venue
+/// doesn't hold back the others.
 const BUILD_TIMEOUT: DurationNanos = DurationNanos::from_secs(30);
 /// Levels per side of the merged book.
 const BOOK_DEPTH: usize = 100;
 
 /// Republishes the trades and books of each unified instrument's venues as
-/// the unified instrument's own.
+/// the unified instrument's own, with prices in USD.
 ///
-/// The unified instrument is built once its venue instruments are loaded, as
-/// its tick is the finest of theirs; venue data is subscribed from then on.
+/// A venue is ready once its instrument is loaded and, if it quotes in a
+/// stablecoin, that coin's USD rate is known. The unified instrument is built
+/// once every venue is ready, as its tick is the finest of theirs; venue data
+/// is subscribed from then on.
 #[derive(Debug)]
 pub struct Unifier {
     core: DataActorCore,
@@ -38,6 +43,8 @@ pub struct Unifier {
     venue_instruments: HashMap<InstrumentId, InstrumentAny>,
     built: HashMap<InstrumentId, Built>,
     subscribed: HashSet<Subscription>,
+    rate_sources: Vec<RateSource>,
+    rates: HashMap<&'static str, UsdRate>,
 }
 
 #[derive(Debug)]
@@ -65,6 +72,8 @@ impl Unifier {
             venue_instruments: HashMap::new(),
             built: HashMap::new(),
             subscribed: HashSet::new(),
+            rate_sources: rate_sources(),
+            rates: HashMap::new(),
         }
     }
 
@@ -75,13 +84,46 @@ impl Unifier {
             .expect("unified_of only maps to known unified instruments")
     }
 
+    /// `None` until the rate is known. Prices are in the currency a
+    /// contract settles in: Hyperliquid perps quote in USD but settle, and
+    /// so price, in USDC. For spot it is the quote currency.
+    fn rate(&self, instrument: &InstrumentAny) -> Option<UsdRate> {
+        match price_currency(instrument).code.as_str() {
+            "USD" => Some(UsdRate::ONE),
+            code => self.rates.get(code).copied(),
+        }
+    }
+
+    fn venue_rate(&self, venue_id: InstrumentId) -> Option<UsdRate> {
+        self.rate(self.venue_instruments.get(&venue_id)?)
+    }
+
+    fn is_ready(&self, sub: &Subscription) -> bool {
+        self.venue_rate(sub.instrument_id).is_some()
+    }
+
+    /// Builds the unified instrument once all its venues are ready, or
+    /// subscribes a venue that becomes ready after it was built.
+    fn progress(&mut self, unified_id: InstrumentId) -> anyhow::Result<()> {
+        let members = self.unified(unified_id).members.clone();
+        if self.built.contains_key(&unified_id) {
+            for sub in members {
+                if self.is_ready(&sub) && !self.subscribed.contains(&sub) {
+                    log::warn!("{} ready late, joins {unified_id}", sub.instrument_id);
+                    self.subscribe_member(unified_id, sub);
+                }
+            }
+        } else if members.iter().all(|m| self.is_ready(m)) {
+            self.build(unified_id)?;
+        }
+        Ok(())
+    }
+
     fn build(&mut self, instrument_id: InstrumentId) -> anyhow::Result<()> {
         let unified = self.unified(instrument_id);
-        let (loaded, missing): (Vec<Subscription>, Vec<Subscription>) = unified
-            .members
-            .iter()
-            .partition(|m| self.venue_instruments.contains_key(&m.instrument_id));
-        let members: Vec<_> = loaded
+        let (ready, missing): (Vec<Subscription>, Vec<Subscription>) =
+            unified.members.iter().partition(|m| self.is_ready(m));
+        let members: Vec<_> = ready
             .iter()
             .map(|m| self.venue_instruments[&m.instrument_id].clone())
             .collect();
@@ -94,8 +136,12 @@ impl Unifier {
             members.len()
         );
         for m in &missing {
+            let reason = match self.venue_instruments.get(&m.instrument_id) {
+                Some(i) => format!("no USD rate for {}", price_currency(i)),
+                None => "instrument not loaded".to_string(),
+            };
             log::warn!(
-                "{instrument_id} built without {}: instrument not loaded",
+                "{instrument_id} built without {}: {reason}",
                 m.instrument_id
             );
         }
@@ -114,17 +160,30 @@ impl Unifier {
             BOOK_DEPTH,
         );
         self.built.insert(instrument_id, Built { instrument, book });
-        for m in loaded {
-            self.subscribe_member(m);
+        for m in ready {
+            self.subscribe_member(instrument_id, m);
         }
         Ok(())
     }
 
-    fn subscribe_member(&mut self, sub: Subscription) {
+    fn subscribe_member(&mut self, unified_id: InstrumentId, sub: Subscription) {
         if !self.subscribed.insert(sub) {
             return;
         }
-        log::info!("unifying {} from {}", sub.instrument_id, sub.client_id);
+        let rate = self
+            .venue_rate(sub.instrument_id)
+            .expect("only ready venues are subscribed");
+        let ts_init = self.clock().timestamp_ns();
+        if let Some(built) = self.built.get_mut(&unified_id) {
+            // The venue has no levels yet: nothing to publish.
+            let _ = built.book.set_rate(sub.instrument_id, rate, ts_init);
+        }
+        log::info!(
+            "unifying {} from {} (USD rate {})",
+            sub.instrument_id,
+            sub.client_id,
+            rate.as_f64()
+        );
         self.subscribe_trades(sub.instrument_id, Some(sub.client_id), None);
         self.subscribe_book_deltas(
             sub.instrument_id,
@@ -137,19 +196,51 @@ impl Unifier {
     }
 }
 
+fn price_currency(instrument: &InstrumentAny) -> Currency {
+    instrument.settlement_currency()
+}
+
+fn publish_book(merged: &OrderBookDeltas, cause: &str) {
+    if log::log_enabled!(log::Level::Debug) {
+        for delta in &merged.deltas {
+            log::debug!(
+                "book {} {:?} {} {} {} from {cause}",
+                delta.instrument_id,
+                delta.action,
+                if delta.order.side == Some(OrderSide::Buy) {
+                    "bid"
+                } else {
+                    "ask"
+                },
+                delta.order.price,
+                delta.order.size,
+            );
+        }
+    }
+    msgbus::publish_deltas(
+        switchboard::get_book_deltas_topic(merged.instrument_id),
+        merged,
+    );
+}
+
 impl DataActor for Unifier {
     fn on_start(&mut self) -> anyhow::Result<()> {
-        // Venue data is subscribed once the client has the instrument: some
-        // load only part of their venue's instruments on connect (Coinbase:
-        // spot only) and drop data for the rest, including the recent trades
+        // Data is subscribed once the client has the instrument: some load
+        // only part of their venue's instruments on connect (Coinbase: spot
+        // only) and drop data for the rest, including the recent trades
         // Coinbase sends on subscribing.
-        for sub in self
+        let rate_ids: Vec<_> = self
+            .rate_sources
+            .iter()
+            .map(|s| (s.instrument_id, s.client_id))
+            .collect();
+        let member_ids: Vec<_> = self
             .unified
             .iter()
-            .flat_map(|u| u.members.clone())
-            .collect::<Vec<_>>()
-        {
-            self.request_instrument(sub.instrument_id, None, None, Some(sub.client_id), None)?;
+            .flat_map(|u| u.members.iter().map(|m| (m.instrument_id, m.client_id)))
+            .collect();
+        for (instrument_id, client_id) in rate_ids.into_iter().chain(member_ids) {
+            self.request_instrument(instrument_id, None, None, Some(client_id), None)?;
         }
         let deadline = self.clock().timestamp_ns() + BUILD_TIMEOUT;
         self.clock()
@@ -158,28 +249,63 @@ impl DataActor for Unifier {
     }
 
     fn on_instrument(&mut self, instrument: &InstrumentAny) -> anyhow::Result<()> {
-        let venue_id = instrument.id();
-        let Some(&unified_id) = self.unified_of.get(&venue_id) else {
+        let instrument_id = instrument.id();
+        if let Some(source) = self
+            .rate_sources
+            .iter()
+            .find(|s| s.instrument_id == instrument_id)
+            .copied()
+        {
+            self.subscribe_quotes(source.instrument_id, Some(source.client_id), None);
+            return Ok(());
+        }
+        let Some(&unified_id) = self.unified_of.get(&instrument_id) else {
             return Ok(());
         };
-        self.venue_instruments.insert(venue_id, instrument.clone());
+        self.venue_instruments
+            .insert(instrument_id, instrument.clone());
+        self.progress(unified_id)
+    }
 
-        if self.built.contains_key(&unified_id) {
-            log::warn!("{venue_id} loaded late, joins {unified_id} with its tick");
-            let sub = *self
-                .unified(unified_id)
-                .members
-                .iter()
-                .find(|m| m.instrument_id == venue_id)
-                .expect("unified_of maps members only");
-            self.subscribe_member(sub);
-        } else if self
-            .unified(unified_id)
-            .members
+    fn on_quote(&mut self, quote: &QuoteTick) -> anyhow::Result<()> {
+        let Some(source) = self
+            .rate_sources
             .iter()
-            .all(|m| self.venue_instruments.contains_key(&m.instrument_id))
+            .find(|s| s.instrument_id == quote.instrument_id)
+            .copied()
+        else {
+            return Ok(());
+        };
+        let rate = UsdRate::from_quote(quote);
+        if self.rates.insert(source.currency, rate) == Some(rate) {
+            return Ok(());
+        }
+        log::debug!("USD rate of {} is {}", source.currency, rate.as_f64());
+
+        let ts_init = self.clock().timestamp_ns();
+        let quoted_in: Vec<_> = self
+            .subscribed
+            .iter()
+            .filter(|sub| {
+                price_currency(&self.venue_instruments[&sub.instrument_id]).code == source.currency
+            })
+            .map(|sub| sub.instrument_id)
+            .collect();
+        for venue_id in quoted_in {
+            let unified_id = self.unified_of[&venue_id];
+            if let Some(built) = self.built.get_mut(&unified_id)
+                && let Some(merged) = built.book.set_rate(venue_id, rate, ts_init)
+            {
+                publish_book(&merged, source.currency);
+            }
+        }
+        for unified_id in self
+            .unified
+            .iter()
+            .map(|u| u.instrument_id)
+            .collect::<Vec<_>>()
         {
-            self.build(unified_id)?;
+            self.progress(unified_id)?;
         }
         Ok(())
     }
@@ -207,6 +333,9 @@ impl DataActor for Unifier {
             self.unsubscribe_trades(sub.instrument_id, Some(sub.client_id), None);
             self.unsubscribe_book_deltas(sub.instrument_id, Some(sub.client_id), None);
         }
+        for source in self.rate_sources.clone() {
+            self.unsubscribe_quotes(source.instrument_id, Some(source.client_id), None);
+        }
         Ok(())
     }
 
@@ -214,13 +343,14 @@ impl DataActor for Unifier {
         let Some(unified_id) = self.unified_of.get(&trade.instrument_id) else {
             return Ok(());
         };
-        let (Some(built), Some(venue_instrument)) = (
+        let (Some(built), Some(venue_instrument), Some(rate)) = (
             self.built.get(unified_id),
             self.venue_instruments.get(&trade.instrument_id),
+            self.venue_rate(trade.instrument_id),
         ) else {
             return Ok(());
         };
-        let trade = unify_trade(trade, venue_instrument, &built.instrument);
+        let trade = unify_trade(trade, venue_instrument, &built.instrument, rate);
         log::debug!(
             "trade {} {:?} {} @ {} id={}",
             trade.instrument_id,
@@ -249,27 +379,7 @@ impl DataActor for Unifier {
             .book
             .apply(deltas, venue_instrument.multiplier(), ts_init)
         {
-            if log::log_enabled!(log::Level::Debug) {
-                for delta in &merged.deltas {
-                    log::debug!(
-                        "book {} {:?} {} {} {} from {}",
-                        delta.instrument_id,
-                        delta.action,
-                        if delta.order.side == Some(OrderSide::Buy) {
-                            "bid"
-                        } else {
-                            "ask"
-                        },
-                        delta.order.price,
-                        delta.order.size,
-                        deltas.instrument_id
-                    );
-                }
-            }
-            msgbus::publish_deltas(
-                switchboard::get_book_deltas_topic(merged.instrument_id),
-                &merged,
-            );
+            publish_book(&merged, &deltas.instrument_id.to_string());
         }
         Ok(())
     }
