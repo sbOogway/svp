@@ -11,8 +11,7 @@ repository = "https://github.com/sbOogway/svp"
 authors = ["Mattia Papaccioli (sbOogway)"]
 
 [workspace.dependencies]
-svp-wire = { path = "crates/wire" }
-svp-transport = { path = "crates/transport" }
+svp-common = { path = "crates/common" }
 svp-client = { path = "crates/client" }
 
 anyhow = "1"

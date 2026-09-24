@@ -4880,9 +4880,23 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "futures",
- "svp-transport",
- "svp-wire",
+ "svp-common",
  "tokio",
+]
+
+[[package]]
+name = "svp-common"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures",
+ "rmp-serde",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -4905,37 +4919,12 @@ dependencies = [
  "nautilus-model",
  "nautilus-okx",
  "svp-client",
- "svp-transport",
- "svp-wire",
+ "svp-common",
  "tempfile",
  "tokio",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "svp-transport"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "futures",
- "rmp-serde",
- "serde",
- "svp-wire",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "svp-wire"
-version = "0.1.0"
-dependencies = [
- "rmp-serde",
- "rust_decimal",
- "serde",
- "serde_json",
 ]
 
 [[package]]

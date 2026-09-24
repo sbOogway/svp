@@ -1,4 +1,4 @@
-//! The server side of the [`svp_wire`] protocol, for one client. Whatever
+//! The server side of the [`svp_common::protocol`], for one client. Whatever
 //! transport accepted the connection hands its frames to [`serve`]; the
 //! handshake, subscriptions, goodbyes and their logs are the same whatever
 //! carries them.
@@ -12,8 +12,7 @@ use std::{
 
 use bytes::{Bytes, BytesMut};
 use futures::{Sink, SinkExt, Stream, StreamExt};
-use svp_transport::codec::{decode, encode};
-use svp_wire::{Message, PROTOCOL_VERSION, Request, Subscription};
+use svp_common::protocol::{Message, PROTOCOL_VERSION, Request, Subscription, decode, encode};
 use tokio::sync::broadcast::{self, error::RecvError};
 use tracing::Instrument;
 
@@ -55,11 +54,11 @@ where
 
 struct Hello {
     name: String,
-    version: svp_wire::Version,
+    version: svp_common::protocol::Version,
 }
 
 enum Refusal {
-    /// Nothing to answer, e.g. [`svp_transport::protocols::unix::Server::bind`]
+    /// Nothing to answer, e.g. [`svp_common::unix::Server::bind`]
     /// checking whether a server is alive.
     Closed,
     Reject(String),
@@ -342,7 +341,7 @@ impl Filter {
 mod tests {
     use std::time::Duration;
 
-    use svp_wire::{Book, BookData, BookSide, BookUpdate, Version};
+    use svp_common::protocol::{Book, BookData, BookSide, BookUpdate, Version};
     use tokio::io::DuplexStream;
     use tokio_util::codec::{Framed, LengthDelimitedCodec};
 

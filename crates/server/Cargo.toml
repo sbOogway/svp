@@ -13,8 +13,7 @@ name = "svp"
 path = "src/main.rs"
 
 [dependencies]
-svp-transport = { workspace = true }
-svp-wire = { workspace = true }
+svp-common = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }

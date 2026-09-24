@@ -4,7 +4,7 @@
 
 use std::fmt::Debug;
 
-use svp_wire::{BookData, Message, Side};
+use svp_common::protocol::{BookData, Message, Side};
 
 pub trait Sink: Debug {
     fn send(&mut self, message: &Message);

@@ -22,6 +22,7 @@ use nautilus_model::{
     types::{Currency, Price, Quantity, fixed::FIXED_PRECISION, quantity::QuantityRaw},
 };
 pub use rates::{RateSource, UsdRate, rate_sources, usd_price};
+use svp_common::protocol;
 
 use crate::aggregator::venue::{Market, Subscription, Venue};
 
@@ -36,7 +37,7 @@ pub struct Unified {
 
 impl Unified {
     /// How the server offers this instrument to its clients.
-    pub fn describe(&self) -> svp_wire::Instrument {
+    pub fn describe(&self) -> protocol::Instrument {
         let mut venues: Vec<String> = Vec::new();
         for member in &self.members {
             let venue = member.venue.as_str();
@@ -44,12 +45,12 @@ impl Unified {
                 venues.push(venue.to_owned());
             }
         }
-        svp_wire::Instrument {
+        protocol::Instrument {
             id: self.instrument_id.to_string(),
             coin: self.members[0].coin.to_string(),
             market: match self.market {
-                Market::Spot => svp_wire::Market::Spot,
-                Market::Futures => svp_wire::Market::Perp,
+                Market::Spot => protocol::Market::Spot,
+                Market::Futures => protocol::Market::Perp,
             },
             venues,
         }
@@ -282,10 +283,10 @@ mod tests {
         let unified = unify(&subscriptions(&feeds));
         assert_eq!(
             unified[0].describe(),
-            svp_wire::Instrument {
+            protocol::Instrument {
                 id: "BTC-PERP.SVP".into(),
                 coin: "BTC".into(),
-                market: svp_wire::Market::Perp,
+                market: protocol::Market::Perp,
                 venues: vec!["BINANCE".into(), "HYPERLIQUID".into()],
             }
         );

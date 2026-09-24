@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use svp_client::{connect, default_path, wire::Subscription};
+use svp_client::{connect, default_path, protocol::Subscription};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {

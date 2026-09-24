@@ -6,10 +6,12 @@ mod client;
 use std::{io, path::Path};
 
 pub use client::Client;
-pub use svp_transport::protocols::unix::{Connection, default_path};
-pub use svp_wire as wire;
+pub use svp_common::{
+    protocol,
+    unix::{Connection, default_path},
+};
 
 /// Connects over the server's Unix socket and says hello.
 pub async fn connect(path: &Path, name: impl Into<String>) -> io::Result<Client<Connection>> {
-    Client::connect(svp_transport::protocols::unix::connect(path).await?, name).await
+    Client::connect(svp_common::unix::connect(path).await?, name).await
 }

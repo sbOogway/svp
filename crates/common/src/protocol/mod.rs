@@ -7,13 +7,15 @@
 //! and closes. The client then subscribes to what it wants from that list,
 //! and either side ends with a `Goodbye`.
 //!
-//! Plain serde types with no transport in them; `svp-transport` decides how
-//! they are encoded and carried.
+//! Each one travels as a frame of `MessagePack` ([`encode`], [`decode`]);
+//! how frames are carried is up to the transport.
 
+mod codec;
 mod decimal;
 
 use std::collections::BTreeMap;
 
+pub use codec::{DecodeError, decode, encode};
 pub use decimal::{Decimal, DecimalError, Price, Quantity};
 use serde::{Deserialize, Serialize};
 

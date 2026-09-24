@@ -5,8 +5,9 @@ use std::io;
 
 use bytes::{Bytes, BytesMut};
 use futures::{Sink, SinkExt, Stream, StreamExt};
-use svp_transport::codec::{decode, encode};
-use svp_wire::{Instrument, Message, PROTOCOL_VERSION, Request, Subscription};
+use svp_common::protocol::{
+    Instrument, Message, PROTOCOL_VERSION, Request, Subscription, decode, encode,
+};
 
 #[derive(Debug)]
 pub struct Client<T> {
