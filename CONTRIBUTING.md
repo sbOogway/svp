@@ -5,7 +5,7 @@
 2. Pick or open an issue; every PR references one and targets a milestone.
 3. Branch from `main`: `<type>/<short-name>` (e.g. `feat/bar-accumulator`).
 4. Commits follow [Conventional Commits](https://www.conventionalcommits.org):
-   `feat(core): …`, `fix(server): …`, `docs: …`. Scopes: `protocol`, `core`,
+   `feat(aggregator): …`, `fix(server): …`, `docs: …`. Scopes: `protocol`, `aggregator`,
    `server`, `app`, `infra`, `docs`.
 5. `make ci` must pass locally — the `pre-push` hook enforces it. There is no hosted CI.
    CI never builds: it checks formatting, lints, tests and audits only.

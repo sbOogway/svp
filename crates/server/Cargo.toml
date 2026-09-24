@@ -13,7 +13,7 @@ name = "svp"
 path = "src/main.rs"
 
 [dependencies]
-svp-core = { workspace = true }
+svp-aggregator = { workspace = true }
 svp-protocol = { workspace = true }
 anyhow = { workspace = true }
 tokio = { workspace = true }

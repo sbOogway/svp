@@ -12,7 +12,7 @@ authors = ["Mattia Papaccioli (sbOogway)"]
 
 [workspace.dependencies]
 svp-protocol = { path = "crates/protocol" }
-svp-core = { path = "crates/core" }
+svp-aggregator = { path = "crates/aggregator" }
 
 anyhow = "1"
 async-trait = "0.1"

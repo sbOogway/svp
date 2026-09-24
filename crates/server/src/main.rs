@@ -1,4 +1,4 @@
-use svp_core::{
+use svp_aggregator::{
     sink::{ChannelSink, LogSink, Sink},
     venue::{Coin, FeedsBuilder, Market, Venue},
 };
@@ -29,6 +29,6 @@ async fn main() -> anyhow::Result<()> {
     // The transport to the app (M2) will subscribe receivers from `_updates`.
     let (channel, _updates) = ChannelSink::new(4096);
     let sinks: Vec<Box<dyn Sink>> = vec![Box::new(LogSink), Box::new(channel)];
-    let mut node = svp_core::node::build(&feeds, sinks)?;
+    let mut node = svp_aggregator::node::build(&feeds, sinks)?;
     node.run().await
 }
