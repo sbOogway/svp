@@ -1,5 +1,5 @@
-//! The connection scheme of [`svp_wire`], served to one client. A transport
-//! accepts a connection, frames it both ways and hands it to [`serve`]; the
+//! The server side of the [`svp_wire`] protocol, for one client. Whatever
+//! transport accepted the connection hands its frames to [`serve`]; the
 //! handshake, subscriptions, goodbyes and their logs are the same whatever
 //! carries them.
 
@@ -12,14 +12,12 @@ use std::{
 
 use bytes::{Bytes, BytesMut};
 use futures::{Sink, SinkExt, Stream, StreamExt};
+use svp_transport::codec::{decode, encode};
 use svp_wire::{Message, PROTOCOL_VERSION, Request, Subscription};
 use tokio::sync::broadcast::{self, error::RecvError};
 use tracing::Instrument;
 
-use crate::{
-    codec::{decode, encode},
-    sink::Hub,
-};
+use crate::hub::Hub;
 
 /// How long a new connection has to send its [`Request::Hello`].
 pub const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
@@ -61,7 +59,7 @@ struct Hello {
 }
 
 enum Refusal {
-    /// Nothing to answer, e.g. [`crate::protocols::unix::Server::bind`]
+    /// Nothing to answer, e.g. [`svp_transport::protocols::unix::Server::bind`]
     /// checking whether a server is alive.
     Closed,
     Reject(String),
@@ -349,13 +347,10 @@ mod tests {
     use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
     use super::*;
-    use crate::{
-        client::Client,
-        sink::{
-            Sink as _,
-            tests::{ID, OTHER, channel, px, qty, subscription, trade, update},
-        },
-    };
+    use svp_aggregator::sink::Sink as _;
+    use svp_client::Client;
+
+    use crate::hub::tests::{ID, OTHER, channel, px, qty, subscription, trade, update};
 
     type Frames = Framed<DuplexStream, LengthDelimitedCodec>;
 

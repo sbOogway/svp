@@ -1,6 +1,6 @@
 [package]
 name = "svp-transport"
-description = "How unified trades and books leave the svp aggregator and reach clients"
+description = "How frames move between the svp server and its clients"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,17 +11,14 @@ authors.workspace = true
 [dependencies]
 svp-wire = { workspace = true }
 bytes = { workspace = true }
-futures = { workspace = true }
-log = { workspace = true }
 rmp-serde = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["net"] }
 tokio-util = { workspace = true }
-tracing = { workspace = true }
 
 [dev-dependencies]
+futures = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["io-util"] }
 
 [lints]
 workspace = true

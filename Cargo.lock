@@ -4891,7 +4891,6 @@ dependencies = [
  "nautilus-live",
  "nautilus-model",
  "nautilus-okx",
- "svp-transport",
  "svp-wire",
  "tokio",
  "tracing",
@@ -4901,6 +4900,8 @@ dependencies = [
 name = "svp-client"
 version = "0.1.0"
 dependencies = [
+ "bytes",
+ "futures",
  "svp-transport",
  "svp-wire",
  "tokio",
@@ -4911,9 +4912,15 @@ name = "svp-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
+ "futures",
  "svp-aggregator",
+ "svp-client",
  "svp-transport",
+ "svp-wire",
+ "tempfile",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
 ]
@@ -4924,14 +4931,12 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "futures",
- "log",
  "rmp-serde",
  "serde",
  "svp-wire",
  "tempfile",
  "tokio",
  "tokio-util",
- "tracing",
 ]
 
 [[package]]

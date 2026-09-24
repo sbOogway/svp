@@ -21,9 +21,15 @@ pub fn decode<T: DeserializeOwned>(frame: &[u8]) -> Result<T, DecodeError> {
 mod tests {
     use svp_wire::{BookData, BookSide, BookUpdate, Message, Side, Trade};
 
-    use crate::sink::tests::{px, qty};
-
     use super::*;
+
+    fn px(s: &str) -> svp_wire::Price {
+        s.parse().unwrap()
+    }
+
+    fn qty(s: &str) -> svp_wire::Quantity {
+        s.parse().unwrap()
+    }
 
     #[test]
     fn every_message_round_trips() {

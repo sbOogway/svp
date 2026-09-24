@@ -8,8 +8,6 @@ use std::{
 use tokio::net::{UnixListener, UnixStream};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
-use crate::{client::Client, session, sink::Hub};
-
 pub type Connection = Framed<UnixStream, LengthDelimitedCodec>;
 
 /// `$XDG_RUNTIME_DIR/svp.sock`, or `svp.sock` in the temp dir without it.
@@ -19,7 +17,7 @@ pub fn default_path() -> PathBuf {
         .join("svp.sock")
 }
 
-/// Removes its socket file when dropped.
+/// Accepts connections on a socket file, which it removes when dropped.
 #[derive(Debug)]
 pub struct Server {
     listener: UnixListener,
@@ -48,20 +46,14 @@ impl Server {
         &self.path
     }
 
-    /// Hands each client that connects to [`session::serve`] in its own task.
-    pub async fn run(self, hub: Hub) -> io::Result<()> {
-        loop {
-            let (stream, _) = self.listener.accept().await?;
-            let peer = match stream.peer_cred().ok().and_then(|cred| cred.pid()) {
-                Some(pid) => format!("unix pid {pid}"),
-                None => "unix".to_owned(),
-            };
-            let hub = hub.clone();
-            tokio::spawn(async move {
-                let frames = Framed::new(stream, LengthDelimitedCodec::new());
-                session::serve(&hub, frames, &peer).await;
-            });
-        }
+    /// The next connection, and what is known of its peer for the logs.
+    pub async fn accept(&self) -> io::Result<(Connection, String)> {
+        let (stream, _) = self.listener.accept().await?;
+        let peer = match stream.peer_cred().ok().and_then(|cred| cred.pid()) {
+            Some(pid) => format!("unix pid {pid}"),
+            None => "unix".to_owned(),
+        };
+        Ok((Framed::new(stream, LengthDelimitedCodec::new()), peer))
     }
 }
 
@@ -71,61 +63,34 @@ impl Drop for Server {
     }
 }
 
-pub async fn connect(path: &Path, name: impl Into<String>) -> io::Result<Client<Connection>> {
+pub async fn connect(path: &Path) -> io::Result<Connection> {
     let stream = UnixStream::connect(path).await?;
-    Client::connect(Framed::new(stream, LengthDelimitedCodec::new()), name).await
+    Ok(Framed::new(stream, LengthDelimitedCodec::new()))
 }
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
-    use svp_wire::{BookData, BookSide, Message};
+    use bytes::Bytes;
+    use futures::{SinkExt, StreamExt};
 
     use super::*;
-    use crate::sink::{
-        Sink as _,
-        tests::{ID, channel, px, qty, subscription, trade, update},
-    };
-
-    async fn next(client: &mut Client<Connection>) -> Message {
-        tokio::time::timeout(Duration::from_secs(1), client.recv())
-            .await
-            .expect("a message within a second")
-            .expect("the server is still running")
-            .unwrap()
-    }
 
     #[tokio::test]
-    async fn a_client_subscribes_to_what_the_welcome_offers() {
+    async fn frames_cross_the_socket_both_ways() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("svp.sock");
-        let (mut sink, hub) = channel(8);
-        sink.send(&update(1, &[(BookSide::Bid, "100", "1")]));
         let server = Server::bind(&path).await.unwrap();
-        let task = tokio::spawn(server.run(hub));
 
-        let mut messages = connect(&path, "test").await.unwrap();
-        assert_eq!(messages.instruments()[0].id, ID);
-        messages
-            .subscribe(vec![subscription(ID, true, true)])
-            .await
-            .unwrap();
-        let Message::Book(snapshot) = next(&mut messages).await else {
-            panic!("expected a snapshot first");
-        };
-        assert_eq!(
-            snapshot.data,
-            BookData::Snapshot {
-                bids: vec![(px("100"), qty("1"))],
-                asks: vec![],
-            }
-        );
-        sink.send(&trade(2));
-        assert_eq!(next(&mut messages).await, trade(2));
+        let mut client = connect(&path).await.unwrap();
+        let (mut accepted, peer) = server.accept().await.unwrap();
+        assert_eq!(peer, format!("unix pid {}", std::process::id()));
 
-        task.abort();
-        let _ = task.await;
+        client.send(Bytes::from_static(b"hello")).await.unwrap();
+        assert_eq!(accepted.next().await.unwrap().unwrap(), &b"hello"[..]);
+        accepted.send(Bytes::from_static(b"welcome")).await.unwrap();
+        assert_eq!(client.next().await.unwrap().unwrap(), &b"welcome"[..]);
+
+        drop(server);
         assert!(!path.exists(), "the socket file is removed with the server");
     }
 

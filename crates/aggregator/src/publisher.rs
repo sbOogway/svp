@@ -10,8 +10,9 @@ use nautilus_model::{
     enums::{AggressorSide, BookAction, BookType, OrderSide},
     identifiers::{ActorId, InstrumentId},
 };
-use svp_transport::sink::Sink;
 use svp_wire::{BookData, BookSide, BookUpdate, Message, Side, Trade};
+
+use crate::sink::Sink;
 
 /// Subscribes to the unified instruments and feeds their trades and book
 /// updates to the sinks.

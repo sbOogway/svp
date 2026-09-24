@@ -1,65 +1,17 @@
-//! Where unified data goes once it leaves the aggregator. A transport is a
-//! sink, or subscribes to [`ChannelSink`] through its [`Hub`]; the aggregator
-//! doesn't know which.
+//! Fans the aggregator's output out to every client session, keeping each
+//! book so a client that subscribes late starts from a snapshot.
 
 use std::{
     collections::BTreeMap,
-    fmt::Debug,
     sync::{Arc, Mutex, MutexGuard, PoisonError},
 };
 
-use svp_wire::{Book, BookData, BookUpdate, Instrument, Message, Side};
+use svp_aggregator::sink::Sink;
+use svp_wire::{Book, BookUpdate, Instrument, Message};
 use tokio::sync::broadcast;
 
-pub trait Sink: Debug {
-    fn send(&mut self, message: &Message);
-}
-
-/// Logs every message at debug level.
-#[derive(Debug, Default)]
-pub struct LogSink;
-
-impl Sink for LogSink {
-    fn send(&mut self, message: &Message) {
-        match message {
-            Message::Trade(t) => log::debug!(
-                "trade {} {} {} @ {} id={}",
-                t.instrument,
-                match t.aggressor {
-                    Some(Side::Buy) => "buy",
-                    Some(Side::Sell) => "sell",
-                    None => "-",
-                },
-                t.size,
-                t.price,
-                t.id
-            ),
-            Message::Book(b) => match &b.data {
-                BookData::Snapshot { bids, asks } => log::debug!(
-                    "book {} snapshot, {} bids, {} asks",
-                    b.instrument,
-                    bids.len(),
-                    asks.len()
-                ),
-                BookData::Update { levels } => {
-                    for (side, price, size) in levels {
-                        log::debug!("book {} {side:?} {price} {size}", b.instrument);
-                    }
-                }
-            },
-            Message::Resync { missed } => log::debug!("resync after {missed} missed"),
-            Message::Welcome { .. }
-            | Message::Error { .. }
-            | Message::Reject { .. }
-            | Message::Goodbye { .. } => {
-                log::debug!("{message:?}");
-            }
-        }
-    }
-}
-
 /// Hands messages to other threads over a broadcast channel: the aggregator
-/// runs on one thread, transports on others. It also keeps every book, so a
+/// runs on one thread, client sessions on others. It also keeps every book, so a
 /// subscriber starts from snapshots, and the instruments clients can pick.
 #[derive(Debug)]
 pub struct ChannelSink {
@@ -158,7 +110,7 @@ impl Shared {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use svp_wire::{BookSide, Market, Price, Quantity, Subscription, Trade};
+    use svp_wire::{BookData, BookSide, Market, Price, Quantity, Side, Subscription, Trade};
 
     use super::*;
 

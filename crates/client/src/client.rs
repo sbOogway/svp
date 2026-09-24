@@ -1,13 +1,12 @@
-//! The client's side of the connection scheme, over any transport that
+//! The client side of the svp protocol, over any transport that
 //! carries frames both ways.
 
 use std::io;
 
 use bytes::{Bytes, BytesMut};
 use futures::{Sink, SinkExt, Stream, StreamExt};
+use svp_transport::codec::{decode, encode};
 use svp_wire::{Instrument, Message, PROTOCOL_VERSION, Request, Subscription};
-
-use crate::codec::{decode, encode};
 
 #[derive(Debug)]
 pub struct Client<T> {
