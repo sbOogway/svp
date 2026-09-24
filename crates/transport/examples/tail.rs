@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use futures::StreamExt;
-use svp_transport::unix;
+use svp_transport::protocols::unix;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {

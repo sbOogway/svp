@@ -3,6 +3,7 @@
 //! that carry frames. No Nautilus, so the app can use it too.
 
 pub mod codec;
+pub mod protocols;
 pub mod session;
 pub mod sink;
-pub mod unix;
+// pub mod unix;

@@ -3,8 +3,8 @@ use std::{ffi::OsString, path::PathBuf};
 use anyhow::Context;
 use svp_aggregator::venue::{Coin, FeedsBuilder, Market, Venue};
 use svp_transport::{
+    protocols::unix,
     sink::{ChannelSink, LogSink, Sink},
-    unix,
 };
 use tracing_subscriber::EnvFilter;
 
