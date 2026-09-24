@@ -5,12 +5,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use futures::{Stream, StreamExt};
-use svp_wire::Message;
+use svp_wire::Subscription;
 use tokio::net::{UnixListener, UnixStream};
-use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
-use crate::{codec::decode, session, sink::Hub};
+use crate::{client::Client, session, sink::Hub};
+
+pub type Connection = Framed<UnixStream, LengthDelimitedCodec>;
 
 /// `$XDG_RUNTIME_DIR/svp.sock`, or `svp.sock` in the temp dir without it.
 pub fn default_path() -> PathBuf {
@@ -48,16 +49,18 @@ impl Server {
         &self.path
     }
 
-    /// Serves each client that connects in its own task.
+    /// Hands each client that connects to [`session::serve`] in its own task.
     pub async fn run(self, hub: Hub) -> io::Result<()> {
         loop {
             let (stream, _) = self.listener.accept().await?;
+            let peer = match stream.peer_cred().ok().and_then(|cred| cred.pid()) {
+                Some(pid) => format!("unix pid {pid}"),
+                None => "unix".to_owned(),
+            };
             let hub = hub.clone();
             tokio::spawn(async move {
-                let frames = FramedWrite::new(stream, LengthDelimitedCodec::new());
-                if let Err(e) = session::serve(&hub, frames).await {
-                    tracing::debug!("client left: {e}");
-                }
+                let frames = Framed::new(stream, LengthDelimitedCodec::new());
+                session::serve(&hub, frames, &peer).await;
             });
         }
     }
@@ -69,17 +72,21 @@ impl Drop for Server {
     }
 }
 
-pub async fn connect(path: &Path) -> io::Result<impl Stream<Item = io::Result<Message>>> {
+pub async fn connect(
+    path: &Path,
+    name: impl Into<String>,
+    subscriptions: Vec<Subscription>,
+) -> io::Result<Client<Connection>> {
     let stream = UnixStream::connect(path).await?;
-    Ok(FramedRead::new(stream, LengthDelimitedCodec::new())
-        .map(|frame| decode(&frame?).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))))
+    let frames = Framed::new(stream, LengthDelimitedCodec::new());
+    Client::connect(frames, name, subscriptions).await
 }
 
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
 
-    use svp_wire::{BookData, BookSide};
+    use svp_wire::{BookData, BookSide, Message};
 
     use super::*;
     use crate::sink::{
@@ -87,8 +94,8 @@ mod tests {
         tests::{px, qty, trade, update},
     };
 
-    async fn next(messages: &mut (impl Stream<Item = io::Result<Message>> + Unpin)) -> Message {
-        tokio::time::timeout(Duration::from_secs(1), messages.next())
+    async fn next(client: &mut Client<Connection>) -> Message {
+        tokio::time::timeout(Duration::from_secs(1), client.recv())
             .await
             .expect("a message within a second")
             .expect("the server is still running")
@@ -104,7 +111,9 @@ mod tests {
         let server = Server::bind(&path).await.unwrap();
         let task = tokio::spawn(server.run(hub));
 
-        let mut messages = Box::pin(connect(&path).await.unwrap());
+        let mut messages = connect(&path, "test", vec![Subscription::everything()])
+            .await
+            .unwrap();
         let Message::Book(snapshot) = next(&mut messages).await else {
             panic!("expected a snapshot first");
         };

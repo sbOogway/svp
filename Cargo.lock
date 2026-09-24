@@ -4917,6 +4917,7 @@ dependencies = [
  "futures",
  "log",
  "rmp-serde",
+ "serde",
  "svp-wire",
  "tempfile",
  "tokio",

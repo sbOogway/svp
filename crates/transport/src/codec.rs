@@ -1,24 +1,25 @@
-//! One [`Message`] per frame, in `MessagePack`. Framing is the transport's job.
+//! One [`svp_wire::Message`] or [`svp_wire::Request`] per frame, in
+//! `MessagePack`. Framing is the transport's job.
 
 use bytes::Bytes;
-use svp_wire::Message;
+use serde::{Serialize, de::DeserializeOwned};
 
 pub use rmp_serde::decode::Error as DecodeError;
 
-pub fn encode(message: &Message) -> Bytes {
+pub fn encode(message: &impl Serialize) -> Bytes {
     // Named: `svp_wire`'s internally tagged enums need field names on the wire.
     rmp_serde::to_vec_named(message)
-        .expect("every Message is representable in MessagePack")
+        .expect("every svp_wire type is representable in MessagePack")
         .into()
 }
 
-pub fn decode(frame: &[u8]) -> Result<Message, DecodeError> {
+pub fn decode<T: DeserializeOwned>(frame: &[u8]) -> Result<T, DecodeError> {
     rmp_serde::from_slice(frame)
 }
 
 #[cfg(test)]
 mod tests {
-    use svp_wire::{BookData, BookSide, BookUpdate, Side, Trade};
+    use svp_wire::{BookData, BookSide, BookUpdate, Message, Side, Trade};
 
     use crate::sink::tests::{px, qty};
 
@@ -61,14 +62,24 @@ mod tests {
                 ],
             }),
             Message::Resync { missed: 7 },
+            Message::Welcome {
+                session: 1,
+                version: svp_wire::PROTOCOL_VERSION,
+            },
+            Message::Reject {
+                reason: "no".into(),
+            },
+            Message::Goodbye {
+                reason: "bye".into(),
+            },
         ];
         for message in messages {
-            assert_eq!(decode(&encode(&message)).unwrap(), message);
+            assert_eq!(decode::<Message>(&encode(&message)).unwrap(), message);
         }
     }
 
     #[test]
     fn garbage_is_an_error() {
-        assert!(decode(&[0xc1]).is_err());
+        assert!(decode::<Message>(&[0xc1]).is_err());
     }
 }
