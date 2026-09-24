@@ -68,7 +68,7 @@ mod tests {
     #[tokio::test]
     async fn snapshots_first_then_messages_in_order() {
         let (mut sink, hub) = ChannelSink::new(8);
-        sink.send(&update(1, vec![(BookSide::Bid, 100.0, 1.0)]));
+        sink.send(&update(1, &[(BookSide::Bid, "100", "1")]));
         let (tx, mut frames) = mpsc::channel(8);
         tokio::spawn(async move { serve(&hub, tx).await });
 
@@ -78,11 +78,11 @@ mod tests {
         assert!(matches!(snapshot.data, BookData::Snapshot { .. }));
 
         sink.send(&trade(2));
-        sink.send(&update(3, vec![(BookSide::Ask, 101.0, 1.0)]));
+        sink.send(&update(3, &[(BookSide::Ask, "101", "1")]));
         assert_eq!(next(&mut frames).await, trade(2));
         assert_eq!(
             next(&mut frames).await,
-            update(3, vec![(BookSide::Ask, 101.0, 1.0)])
+            update(3, &[(BookSide::Ask, "101", "1")])
         );
     }
 
@@ -98,7 +98,7 @@ mod tests {
         for i in 0..50_u32 {
             sink.send(&update(
                 u64::from(i),
-                vec![(BookSide::Bid, f64::from(i), 1.0)],
+                &[(BookSide::Bid, &i.to_string(), "1")],
             ));
         }
 

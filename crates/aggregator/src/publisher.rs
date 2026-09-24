@@ -78,8 +78,8 @@ pub fn trade_message(trade: &TradeTick) -> Message {
     Message::Trade(Trade {
         instrument: trade.instrument_id.to_string(),
         ts: trade.ts_event.as_u64(),
-        price: trade.price.as_f64(),
-        size: trade.size.as_f64(),
+        price: trade.price.as_decimal().into(),
+        size: trade.size.as_decimal().into(),
         aggressor: match trade.aggressor_side {
             AggressorSide::Buy => Some(Side::Buy),
             AggressorSide::Sell => Some(Side::Sell),
@@ -120,11 +120,11 @@ pub fn book_messages(deltas: &OrderBookDeltas) -> Vec<Message> {
             Some(OrderSide::Sell) => BookSide::Ask,
             None => continue,
         };
-        let quantity = match delta.action {
-            BookAction::Delete => 0.0,
-            _ => delta.order.size.as_f64(),
+        let size = match delta.action {
+            BookAction::Delete => svp_wire::Quantity::ZERO,
+            _ => delta.order.size.as_decimal().into(),
         };
-        levels.push((book_side, delta.order.price.as_f64(), quantity));
+        levels.push((book_side, delta.order.price.as_decimal().into(), size));
     }
     if !levels.is_empty() {
         messages.push(message(BookData::Update { levels }));
@@ -137,7 +137,10 @@ mod tests {
     use nautilus_model::{
         data::{BookOrder, OrderBookDelta},
         identifiers::TradeId,
-        types::{Price, Quantity},
+        types::{
+            Price, Quantity, fixed::FIXED_PRECISION, price::PRICE_RAW_MAX,
+            quantity::QUANTITY_RAW_MAX,
+        },
     };
 
     use super::*;
@@ -157,7 +160,19 @@ mod tests {
         )
     }
 
-    fn update(levels: Vec<(BookSide, f64, f64)>) -> Message {
+    fn px(s: &str) -> svp_wire::Price {
+        s.parse().unwrap()
+    }
+
+    fn qty(s: &str) -> svp_wire::Quantity {
+        s.parse().unwrap()
+    }
+
+    fn update(levels: &[(BookSide, &str, &str)]) -> Message {
+        let levels = levels
+            .iter()
+            .map(|&(side, price, size)| (side, px(price), qty(size)))
+            .collect();
         Message::Book(BookUpdate {
             instrument: ID.into(),
             ts: 5,
@@ -181,8 +196,8 @@ mod tests {
             Message::Trade(Trade {
                 instrument: ID.into(),
                 ts: 7,
-                price: 83471.5,
-                size: 0.25,
+                price: px("83471.5"),
+                size: qty("0.25"),
                 aggressor: Some(Side::Sell),
                 id: "abc-BIN".into(),
             })
@@ -201,10 +216,10 @@ mod tests {
         );
         assert_eq!(
             book_messages(&deltas),
-            [update(vec![
-                (BookSide::Bid, 100.0, 1.5),
-                (BookSide::Ask, 101.0, 2.0),
-                (BookSide::Bid, 99.0, 0.0),
+            [update(&[
+                (BookSide::Bid, "100.0", "1.5"),
+                (BookSide::Ask, "101.0", "2"),
+                (BookSide::Bid, "99.0", "0"),
             ])]
         );
     }
@@ -226,7 +241,60 @@ mod tests {
         });
         assert_eq!(
             book_messages(&deltas),
-            [empty, update(vec![(BookSide::Bid, 100.0, 1.0)])]
+            [empty, update(&[(BookSide::Bid, "100.0", "1")])]
         );
+    }
+
+    #[test]
+    fn keeps_trailing_zeros() {
+        let trade = TradeTick::new(
+            InstrumentId::from(ID),
+            Price::from("83470.900"),
+            Quantity::from("0.30000000"),
+            AggressorSide::NoAggressor,
+            TradeId::from("abc-BIN"),
+            7.into(),
+            7.into(),
+        );
+        let Message::Trade(converted) = trade_message(&trade) else {
+            panic!("expected a trade");
+        };
+        assert_eq!(converted.price.to_string(), "83470.900");
+        assert_eq!(converted.size.to_string(), "0.30000000");
+    }
+
+    /// `digits` with a decimal point `precision` digits from the right.
+    fn with_point(digits: &str, precision: u8) -> String {
+        let precision = usize::from(precision);
+        let digits = format!("{digits:0>width$}", width = precision + 1);
+        let (whole, fraction) = digits.split_at(digits.len() - precision);
+        if fraction.is_empty() {
+            whole.to_string()
+        } else {
+            format!("{whole}.{fraction}")
+        }
+    }
+
+    // One below the largest, so every digit is significant. At precision 16
+    // those need 30 digits, more than a `Decimal` holds.
+    #[test]
+    fn converts_the_largest_values_exactly_up_to_precision_15() {
+        for precision in 0..FIXED_PRECISION {
+            let unit = 10_i128.pow(u32::from(FIXED_PRECISION - precision));
+            let raw = PRICE_RAW_MAX / unit * unit - unit;
+            assert_eq!(
+                svp_wire::Price::from(Price::from_raw(raw, precision).as_decimal()).to_string(),
+                with_point(&(raw / unit).to_string(), precision),
+                "price at precision {precision}"
+            );
+            let unit = 10_u128.pow(u32::from(FIXED_PRECISION - precision));
+            let raw = QUANTITY_RAW_MAX / unit * unit - unit;
+            assert_eq!(
+                svp_wire::Quantity::from(Quantity::from_raw(raw, precision).as_decimal())
+                    .to_string(),
+                with_point(&(raw / unit).to_string(), precision),
+                "size at precision {precision}"
+            );
+        }
     }
 }

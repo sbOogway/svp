@@ -1,3 +1,5 @@
+use std::fmt;
+
 use nautilus_model::{
     data::QuoteTick,
     identifiers::{ClientId, InstrumentId},
@@ -30,9 +32,17 @@ impl UsdRate {
         let (whole, fraction) = (raw / SCALE, raw % SCALE);
         whole * self.0 + (fraction * self.0 + SCALE / 2) / SCALE
     }
+}
 
-    pub fn as_f64(self) -> f64 {
-        Price::from_raw(self.0, FIXED_PRECISION).as_f64()
+impl fmt::Display for UsdRate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            Price::from_raw(self.0, FIXED_PRECISION)
+                .as_decimal()
+                .normalize()
+        )
     }
 }
 

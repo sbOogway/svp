@@ -20,6 +20,8 @@ pub fn decode(frame: &[u8]) -> Result<Message, DecodeError> {
 mod tests {
     use svp_wire::{BookData, BookSide, BookUpdate, Side, Trade};
 
+    use crate::sink::tests::{px, qty};
+
     use super::*;
 
     #[test]
@@ -35,25 +37,28 @@ mod tests {
             Message::Trade(Trade {
                 instrument: "BTC-PERP.SVP".into(),
                 ts: 1,
-                price: 83471.5,
-                size: 0.25,
+                price: px("83471.5"),
+                size: qty("0.25"),
                 aggressor: Some(Side::Buy),
                 id: "abc-BIN".into(),
             }),
             Message::Trade(Trade {
                 instrument: "BTC-PERP.SVP".into(),
                 ts: 1,
-                price: 83471.5,
-                size: 0.25,
+                price: px("83471.5"),
+                size: qty("0.25"),
                 aggressor: None,
                 id: "abc-BIN".into(),
             }),
             book(BookData::Snapshot {
-                bids: vec![(83471.0, 1.2)],
-                asks: vec![(83472.0, 0.5)],
+                bids: vec![(px("83471.0"), qty("1.2"))],
+                asks: vec![(px("83472.0"), qty("0.5"))],
             }),
             book(BookData::Update {
-                levels: vec![(BookSide::Bid, 83470.9, 0.4), (BookSide::Ask, 83472.0, 0.0)],
+                levels: vec![
+                    (BookSide::Bid, px("83470.9"), qty("0.4")),
+                    (BookSide::Ask, px("83472.0"), qty("0")),
+                ],
             }),
             Message::Resync { missed: 7 },
         ];

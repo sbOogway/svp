@@ -182,7 +182,7 @@ impl Unifier {
             "unifying {} from {} (USD rate {})",
             sub.instrument_id,
             sub.client_id,
-            rate.as_f64()
+            rate
         );
         self.subscribe_trades(sub.instrument_id, Some(sub.client_id), None);
         self.subscribe_book_deltas(
@@ -264,7 +264,7 @@ impl DataActor for Unifier {
         if self.rates.insert(source.currency, rate) == Some(rate) {
             return Ok(());
         }
-        log::debug!("USD rate of {} is {}", source.currency, rate.as_f64());
+        log::debug!("USD rate of {} is {}", source.currency, rate);
 
         let ts_init = self.clock().timestamp_ns();
         let quoted_in: Vec<_> = self
