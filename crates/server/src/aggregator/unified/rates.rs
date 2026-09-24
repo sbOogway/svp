@@ -6,7 +6,7 @@ use nautilus_model::{
     types::{Price, fixed::FIXED_PRECISION, price::PriceRaw},
 };
 
-use crate::venue::{self, Market, Venue};
+use crate::aggregator::venue::{self, Market, Venue};
 
 const SCALE: PriceRaw = PriceRaw::pow(10, FIXED_PRECISION as u32);
 

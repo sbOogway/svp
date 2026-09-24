@@ -13,12 +13,23 @@ name = "svp"
 path = "src/main.rs"
 
 [dependencies]
-svp-aggregator = { workspace = true }
 svp-transport = { workspace = true }
 svp-wire = { workspace = true }
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
+log = { workspace = true }
+nautilus-binance = { workspace = true }
+nautilus-bybit = { workspace = true }
+nautilus-coinbase = { workspace = true }
+nautilus-common = { workspace = true }
+nautilus-core = { workspace = true }
+nautilus-hyperliquid = { workspace = true }
+nautilus-kraken = { workspace = true }
+nautilus-live = { workspace = true }
+nautilus-model = { workspace = true }
+nautilus-okx = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

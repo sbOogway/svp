@@ -23,7 +23,7 @@ use nautilus_model::{
 };
 pub use rates::{RateSource, UsdRate, rate_sources, usd_price};
 
-use crate::venue::{Market, Subscription, Venue};
+use crate::aggregator::venue::{Market, Subscription, Venue};
 
 pub const VENUE: &str = "SVP";
 
@@ -218,7 +218,7 @@ mod tests {
     use nautilus_model::enums::AggressorSide;
 
     use super::*;
-    use crate::venue::{Coin, FeedsBuilder, subscriptions};
+    use crate::aggregator::venue::{Coin, FeedsBuilder, subscriptions};
 
     fn perp(id: &str, tick: &str, size_step: &str, multiplier: &str) -> InstrumentAny {
         let tick = Price::from(tick);

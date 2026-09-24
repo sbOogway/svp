@@ -1,5 +1,5 @@
 //! Where unified data goes once it leaves the aggregator: the server hands
-//! [`crate::node::build`] its sinks, and the aggregator doesn't know what
+//! [`crate::aggregator::node::build`] its sinks, and the aggregator doesn't know what
 //! they do with it.
 
 use std::fmt::Debug;

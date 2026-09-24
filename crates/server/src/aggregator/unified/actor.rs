@@ -18,7 +18,7 @@ use nautilus_model::{
 use super::{
     MergedBook, RateSource, Unified, UsdRate, build_instrument, rate_sources, unify_trade,
 };
-use crate::venue::Subscription;
+use crate::aggregator::venue::Subscription;
 
 const BUILD_TIMER: &str = "unifier-build";
 /// How long to wait for every venue instrument and USD rate before building

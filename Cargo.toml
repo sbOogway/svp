@@ -12,7 +12,6 @@ authors = ["Mattia Papaccioli (sbOogway)"]
 
 [workspace.dependencies]
 svp-wire = { path = "crates/wire" }
-svp-aggregator = { path = "crates/aggregator" }
 svp-transport = { path = "crates/transport" }
 svp-client = { path = "crates/client" }
 

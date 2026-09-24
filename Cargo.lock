@@ -4875,28 +4875,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
-name = "svp-aggregator"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "log",
- "nautilus-binance",
- "nautilus-bybit",
- "nautilus-coinbase",
- "nautilus-common",
- "nautilus-core",
- "nautilus-hyperliquid",
- "nautilus-kraken",
- "nautilus-live",
- "nautilus-model",
- "nautilus-okx",
- "svp-wire",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "svp-client"
 version = "0.1.0"
 dependencies = [
@@ -4912,9 +4890,20 @@ name = "svp-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "bytes",
  "futures",
- "svp-aggregator",
+ "log",
+ "nautilus-binance",
+ "nautilus-bybit",
+ "nautilus-coinbase",
+ "nautilus-common",
+ "nautilus-core",
+ "nautilus-hyperliquid",
+ "nautilus-kraken",
+ "nautilus-live",
+ "nautilus-model",
+ "nautilus-okx",
  "svp-client",
  "svp-transport",
  "svp-wire",

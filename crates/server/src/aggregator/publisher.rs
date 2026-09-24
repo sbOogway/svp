@@ -12,7 +12,7 @@ use nautilus_model::{
 };
 use svp_wire::{BookData, BookSide, BookUpdate, Message, Side, Trade};
 
-use crate::sink::Sink;
+use crate::aggregator::sink::Sink;
 
 /// Subscribes to the unified instruments and feeds their trades and book
 /// updates to the sinks.

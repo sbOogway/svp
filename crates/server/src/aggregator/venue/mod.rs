@@ -133,6 +133,7 @@ named_enum! {
     /// Bybit and OKX, USD on Kraken, Coinbase and Hyperliquid. Each one is
     /// listed in both markets on every venue, except that Hyperliquid has no
     /// spot and Coinbase has no TRX.
+    #[expect(clippy::upper_case_acronyms, reason = "tickers, named as the venues list them")]
     pub enum Coin {
         BTC, ETH, SOL, XRP, DOGE, BNB, ADA, AVAX, LINK, LTC, DOT, TRX, SUI, BCH,
     }
@@ -157,14 +158,6 @@ impl Feed {
     /// client, not by venue.
     pub fn client_id(&self) -> ClientId {
         client_id(self.venue, self.market)
-    }
-
-    pub fn venue(&self) -> Venue {
-        self.venue
-    }
-
-    pub fn market(&self) -> Market {
-        self.market
     }
 
     pub fn instrument_ids(&self) -> Vec<InstrumentId> {
