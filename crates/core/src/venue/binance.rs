@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use nautilus_binance::{
     common::enums::{BinanceEnvironment, BinanceProductType},
     config::{BinanceDataClientConfig, BinanceInstrumentProviderConfig, BinanceSpotMarketDataMode},
@@ -39,5 +41,9 @@ impl Exchange for Binance {
             factory: Box::new(BinanceDataClientFactory::new()),
             config: Box::new(config),
         }
+    }
+
+    fn book_depth(&self, _market: Market) -> Option<NonZeroUsize> {
+        NonZeroUsize::new(100)
     }
 }
