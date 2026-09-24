@@ -1,5 +1,5 @@
-//! The client side of the svp protocol, and a mock client for trying and
-//! testing the server in `examples/mock_client.rs`.
+//! The client side of the svp protocol, and the clients built on it in
+//! `src/bin/`: `mock_client` prints what the server streams.
 
 mod session;
 

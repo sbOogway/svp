@@ -1,6 +1,6 @@
 [package]
 name = "svp-client"
-description = "The client side of the svp protocol, and a mock client for testing the server"
+description = "The client side of the svp protocol, and the clients built on it"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,8 +12,6 @@ authors.workspace = true
 svp-common = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
-
-[dev-dependencies]
 tokio = { workspace = true }
 
 [lints]
