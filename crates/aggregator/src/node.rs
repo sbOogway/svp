@@ -1,10 +1,11 @@
 use nautilus_common::{enums::Environment, logging::config::LoggerConfig};
 use nautilus_live::node::LiveNode;
 use nautilus_model::identifiers::TraderId;
+use svp_transport::sink::Sink;
 
 use crate::{
     actor::VolumeLogger,
-    sink::{Publisher, Sink},
+    publisher::Publisher,
     unified::{self, SvpDataClientConfig, SvpDataClientFactory, Unifier},
     venue::{self, DataClientSpec, Feed, Market, Venue},
 };

@@ -10,6 +10,7 @@ authors.workspace = true
 
 [dependencies]
 svp-protocol = { workspace = true }
+svp-transport = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 log = { workspace = true }
