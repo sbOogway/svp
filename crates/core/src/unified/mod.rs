@@ -14,6 +14,7 @@ mod rates;
 pub use actor::Unifier;
 pub use book::MergedBook;
 pub use client::{SvpDataClientConfig, SvpDataClientFactory};
+use nautilus_core::UUID4;
 use nautilus_model::{
     data::TradeTick,
     identifiers::{InstrumentId, Symbol, TradeId},
@@ -22,7 +23,7 @@ use nautilus_model::{
 };
 pub use rates::{RateSource, UsdRate, rate_sources, usd_price};
 
-use crate::venue::{Market, Subscription};
+use crate::venue::{Market, Subscription, Venue};
 
 pub const VENUE: &str = "SVP";
 
@@ -152,9 +153,10 @@ pub fn build_instrument(
 }
 
 /// A venue trade as a trade of the unified instrument: price in USD, size
-/// in coins, the venue's side and timestamps, and an ID unique across venues.
+/// in coins, the venue's side and timestamps, and a new ID.
 pub fn unify_trade(
     trade: &TradeTick,
+    venue: Venue,
     venue_instrument: &InstrumentAny,
     unified: &InstrumentAny,
     rate: UsdRate,
@@ -167,7 +169,7 @@ pub fn unify_trade(
             unified.size_precision(),
         ),
         trade.aggressor_side,
-        trade_id(trade.instrument_id.venue.as_str(), trade.trade_id.as_str()),
+        trade_id(venue),
         trade.ts_event,
         trade.ts_init,
     )
@@ -183,19 +185,11 @@ fn with_size_precision(size: Quantity, precision: u8) -> Quantity {
     }
 }
 
-/// `VENUE-id`, within the 36 characters a `TradeId` holds. Coinbase and
-/// Kraken use UUIDs, which only fit without their dashes and with their
-/// leading digits cut; the rest is still unique.
-fn trade_id(venue: &str, id: &str) -> TradeId {
-    const MAX_LEN: usize = 36;
-    let room = MAX_LEN - venue.len() - 1;
-    let id = if id.len() > room {
-        id.replace('-', "")
-    } else {
-        id.to_string()
-    };
-    let id = &id[id.len().saturating_sub(room)..];
-    TradeId::new(format!("{venue}-{id}"))
+/// A random UUID without its dashes, then the venue code: the 36 characters
+/// a `TradeId` holds. Venue IDs are dropped; their formats differ per venue.
+fn trade_id(venue: Venue) -> TradeId {
+    let uuid = UUID4::new().to_string().replace('-', "");
+    TradeId::new(format!("{uuid}-{}", venue.code()))
 }
 
 #[cfg(test)]
@@ -203,7 +197,7 @@ mod tests {
     use nautilus_model::enums::AggressorSide;
 
     use super::*;
-    use crate::venue::{Coin, FeedsBuilder, Venue, subscriptions};
+    use crate::venue::{Coin, FeedsBuilder, subscriptions};
 
     fn perp(id: &str, tick: &str, size_step: &str, multiplier: &str) -> InstrumentAny {
         let tick = Price::from(tick);
@@ -326,20 +320,25 @@ mod tests {
             7.into(),
             8.into(),
         );
-        let out = unify_trade(&trade, &okx, &unified, UsdRate::ONE);
+        let out = unify_trade(&trade, Venue::Okx, &okx, &unified, UsdRate::ONE);
         assert_eq!(out.instrument_id, InstrumentId::from("BTC-PERP.SVP"));
         assert_eq!(out.price, Price::from("84000.1"));
         assert_eq!(out.size, Quantity::from("0.0300"));
         assert_eq!(out.aggressor_side, AggressorSide::Sell);
-        assert_eq!(out.trade_id, TradeId::from("OKX-123"));
+        assert!(out.trade_id.as_str().ends_with("-OKX"));
         assert_eq!((out.ts_event, out.ts_init), (7.into(), 8.into()));
     }
 
     #[test]
-    fn trade_ids_fit_even_from_uuids() {
-        let uuid = "0f8c5a3e-6b1d-4c2a-9e7f-1234567890ab";
-        let id = trade_id("COINBASE", uuid);
-        assert_eq!(id.as_str(), "COINBASE-a3e6b1d4c2a9e7f1234567890ab");
-        assert_eq!(trade_id("BINANCE", "42").as_str(), "BINANCE-42");
+    fn trade_ids_are_a_uuid_and_the_venue_code() {
+        for &venue in Venue::ALL {
+            let id = trade_id(venue);
+            let (uuid, code) = id.as_str().split_once('-').unwrap();
+            assert_eq!(id.as_str().len(), 36, "{id}");
+            assert_eq!(uuid.len(), 32);
+            assert!(uuid.chars().all(|c| c.is_ascii_hexdigit()));
+            assert_eq!(code, venue.code());
+        }
+        assert_ne!(trade_id(Venue::Binance), trade_id(Venue::Binance));
     }
 }
