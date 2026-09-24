@@ -13,8 +13,8 @@ Requirements: [rustup](https://rustup.rs) (toolchain pinned in `rust-toolchain.t
 ./scripts/setup.sh     # installs git hooks
 make ci-fast           # fmt, clippy
 make ci                # + tests, audit  (what pre-push runs)
-cargo run              # merges BTC perp trades and books from every venue into BTC-PERP.SVP, logs volume per minute
-cargo run -p svp-client --bin mock_client   # prints what the running server streams
+cargo run --bin svp-server        # merges BTC perp trades and books from every venue into BTC-PERP.SVP, logs volume per minute
+cargo run --bin svp-mock-client   # prints what the running server streams
 ```
 
 The server listens on `$XDG_RUNTIME_DIR/svp.sock`; change it with `--socket PATH`
@@ -25,9 +25,9 @@ Logging: the node and svp's actors log through Nautilus, configured with
 
 ```sh
 # every unified trade and merged book delta, and nothing but svp's own logs
-NAUTILUS_LOG="stdout=Debug;log_components_only;svp::aggregator::=Debug" cargo run
+NAUTILUS_LOG="stdout=Debug;log_components_only;svp_server::aggregator::=Debug" cargo run --bin svp-server
 # everything at debug, Nautilus included (very verbose)
-NAUTILUS_LOG="stdout=Debug" cargo run
+NAUTILUS_LOG="stdout=Debug" cargo run --bin svp-server
 ```
 
 ## Licensing

@@ -8,6 +8,13 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[lib]
+path = "lib.rs"
+
+[[bin]]
+name = "svp-mock-client"
+path = "bin/svp-mock-client.rs"
+
 [dependencies]
 svp-common = { workspace = true }
 bytes = { workspace = true }
