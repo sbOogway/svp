@@ -9,7 +9,7 @@ use nautilus_common::{
 use nautilus_core::DurationNanos;
 use nautilus_model::{
     data::{OrderBookDeltas, QuoteTick, TradeTick},
-    enums::{BookType, OrderSide},
+    enums::BookType,
     identifiers::{ActorId, InstrumentId},
     instruments::{Instrument, InstrumentAny},
     types::Currency,
@@ -200,23 +200,7 @@ fn price_currency(instrument: &InstrumentAny) -> Currency {
     instrument.settlement_currency()
 }
 
-fn publish_book(merged: &OrderBookDeltas, cause: &str) {
-    if log::log_enabled!(log::Level::Debug) {
-        for delta in &merged.deltas {
-            log::debug!(
-                "book {} {:?} {} {} {} from {cause}",
-                delta.instrument_id,
-                delta.action,
-                if delta.order.side == Some(OrderSide::Buy) {
-                    "bid"
-                } else {
-                    "ask"
-                },
-                delta.order.price,
-                delta.order.size,
-            );
-        }
-    }
+fn publish_book(merged: &OrderBookDeltas) {
     msgbus::publish_deltas(
         switchboard::get_book_deltas_topic(merged.instrument_id),
         merged,
@@ -296,7 +280,7 @@ impl DataActor for Unifier {
             if let Some(built) = self.built.get_mut(&unified_id)
                 && let Some(merged) = built.book.set_rate(venue_id, rate, ts_init)
             {
-                publish_book(&merged, source.currency);
+                publish_book(&merged);
             }
         }
         for unified_id in self
@@ -358,14 +342,6 @@ impl DataActor for Unifier {
             .expect("unified_of maps members only")
             .venue;
         let trade = unify_trade(trade, venue, venue_instrument, &built.instrument, rate);
-        log::debug!(
-            "trade {} {:?} {} @ {} id={}",
-            trade.instrument_id,
-            trade.aggressor_side,
-            trade.size,
-            trade.price,
-            trade.trade_id
-        );
         self.cache_rc().borrow_mut().add_trade(trade)?;
         msgbus::publish_trade(switchboard::get_trades_topic(trade.instrument_id), &trade);
         Ok(())
@@ -386,7 +362,7 @@ impl DataActor for Unifier {
             .book
             .apply(deltas, venue_instrument.multiplier(), ts_init)
         {
-            publish_book(&merged, &deltas.instrument_id.to_string());
+            publish_book(&merged);
         }
         Ok(())
     }

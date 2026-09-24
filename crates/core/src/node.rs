@@ -4,13 +4,14 @@ use nautilus_model::identifiers::TraderId;
 
 use crate::{
     actor::VolumeLogger,
+    sink::{Publisher, Sink},
     unified::{self, SvpDataClientConfig, SvpDataClientFactory, Unifier},
     venue::{self, DataClientSpec, Feed, Market, Venue},
 };
 
 /// Building the node initializes Nautilus logging, which registers the global
 /// `log` logger: the caller must not have registered another one.
-pub fn build(feeds: &[Feed]) -> anyhow::Result<LiveNode> {
+pub fn build(feeds: &[Feed], sinks: Vec<Box<dyn Sink>>) -> anyhow::Result<LiveNode> {
     let mut builder = LiveNode::builder(TraderId::from("SVP-001"), Environment::Live)?
         .with_name("svp")
         .with_delay_post_stop_secs(1);
@@ -46,7 +47,9 @@ pub fn build(feeds: &[Feed]) -> anyhow::Result<LiveNode> {
 
     let mut node = builder.build()?;
     let unified = unified::unify(&venue::subscriptions(feeds));
+    let unified_ids = unified.iter().map(|u| u.instrument_id).collect();
     node.add_actor(Unifier::new(unified.clone()))?;
     node.add_actor(VolumeLogger::new(unified))?;
+    node.add_actor(Publisher::new(unified_ids, sinks))?;
     Ok(node)
 }

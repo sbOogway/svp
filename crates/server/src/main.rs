@@ -1,4 +1,7 @@
-use svp_core::venue::{Coin, FeedsBuilder, Market, Venue};
+use svp_core::{
+    sink::{ChannelSink, LogSink, Sink},
+    venue::{Coin, FeedsBuilder, Market, Venue},
+};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -23,6 +26,9 @@ async fn main() -> anyhow::Result<()> {
         .add_instrument(Coin::BTC)
         .build()?;
 
-    let mut node = svp_core::node::build(&feeds)?;
+    // The transport to the app (M2) will subscribe receivers from `_updates`.
+    let (channel, _updates) = ChannelSink::new(4096);
+    let sinks: Vec<Box<dyn Sink>> = vec![Box::new(LogSink), Box::new(channel)];
+    let mut node = svp_core::node::build(&feeds, sinks)?;
     node.run().await
 }
