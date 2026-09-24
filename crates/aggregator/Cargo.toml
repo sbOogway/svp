@@ -9,7 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-svp-protocol = { workspace = true }
+svp-wire = { workspace = true }
 svp-transport = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }

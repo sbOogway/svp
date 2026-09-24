@@ -4891,18 +4891,10 @@ dependencies = [
  "nautilus-live",
  "nautilus-model",
  "nautilus-okx",
- "svp-protocol",
  "svp-transport",
+ "svp-wire",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "svp-protocol"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -4911,7 +4903,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "svp-aggregator",
- "svp-protocol",
  "svp-transport",
  "tokio",
  "tracing",
@@ -4926,11 +4917,19 @@ dependencies = [
  "futures",
  "log",
  "rmp-serde",
- "svp-protocol",
+ "svp-wire",
  "tempfile",
  "tokio",
  "tokio-util",
  "tracing",
+]
+
+[[package]]
+name = "svp-wire"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

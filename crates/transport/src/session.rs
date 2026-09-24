@@ -2,7 +2,7 @@
 
 use bytes::Bytes;
 use futures::{Sink, SinkExt};
-use svp_protocol::Message;
+use svp_wire::Message;
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::{codec::encode, sink::Hub};
@@ -40,7 +40,7 @@ mod tests {
     use std::time::Duration;
 
     use futures::{StreamExt, channel::mpsc};
-    use svp_protocol::{Book, BookData, BookSide};
+    use svp_wire::{Book, BookData, BookSide};
 
     use super::*;
     use crate::{
