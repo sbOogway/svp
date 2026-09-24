@@ -1,6 +1,6 @@
 [package]
 name = "svp-server"
-description = "svp server binary: runs the aggregator and serves its clients the svp protocol over a Unix socket"
+description = "svp server: runs the aggregator and serves its clients the svp protocol over a Unix socket"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,9 +8,12 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[lib]
+path = "lib.rs"
+
 [[bin]]
-name = "svp"
-path = "src/main.rs"
+name = "svp-server"
+path = "bin/svp-server.rs"
 
 [dependencies]
 svp-common = { workspace = true }

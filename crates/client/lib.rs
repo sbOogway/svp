@@ -1,5 +1,5 @@
 //! The client side of the svp protocol, and the clients built on it in
-//! `src/bin/`: `mock_client` prints what the server streams.
+//! `bin/`: `svp-mock-client` prints what the server streams.
 
 mod session;
 
