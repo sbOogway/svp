@@ -3,8 +3,9 @@
 //! scheme every transport carries the same way.
 //!
 //! A client opens with [`Request::Hello`]; the server answers
-//! [`Message::Welcome`] and streams what the client subscribed to, or
-//! [`Message::Reject`] and closes. Either side ends with a `Goodbye`.
+//! [`Message::Welcome`] with the instruments it has, or [`Message::Reject`]
+//! and closes. The client then subscribes to what it wants from that list,
+//! and either side ends with a `Goodbye`.
 //!
 //! Plain serde types with no transport in them; `svp-transport` decides how
 //! they are encoded and carried.
@@ -32,10 +33,16 @@ pub enum Message {
         missed: u64,
     },
     /// Accepts a [`Request::Hello`]; the server's logs know this client by
-    /// `session`.
+    /// `session`. Nothing streams until the client subscribes to some of
+    /// `instruments`.
     Welcome {
         session: u64,
         version: Version,
+        instruments: Vec<Instrument>,
+    },
+    /// A request the server could not fully honor; the session goes on.
+    Error {
+        reason: String,
     },
     /// Refuses a [`Request::Hello`], then the server closes.
     Reject {
@@ -52,17 +59,13 @@ pub enum Message {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Request {
     /// The first frame of every connection.
-    Hello {
-        version: Version,
-        name: String,
-        subscriptions: Vec<Subscription>,
-    },
+    Hello { version: Version, name: String },
     /// Adds to what the client receives; a book it newly receives starts
-    /// with a snapshot.
+    /// with a snapshot. An instrument the [`Message::Welcome`] did not list
+    /// is answered with [`Message::Error`] and the rest still applies.
     Subscribe { subscriptions: Vec<Subscription> },
     /// Takes the kinds a subscription sets away from what the client
-    /// receives for its instrument. Taking them from every instrument does
-    /// not undo a subscription to one instrument.
+    /// receives for its instrument.
     Unsubscribe { subscriptions: Vec<Subscription> },
     /// The client is closing the connection.
     Goodbye { reason: String },
@@ -70,20 +73,27 @@ pub enum Request {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Subscription {
-    /// `None` for every instrument, including ones that appear later.
-    pub instrument: Option<String>,
+    pub instrument: String,
     pub trades: bool,
     pub books: bool,
 }
 
-impl Subscription {
-    pub fn everything() -> Self {
-        Self {
-            instrument: None,
-            trades: true,
-            books: true,
-        }
-    }
+/// One instrument the server merges from many venues.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Instrument {
+    /// What [`Trade::instrument`], [`BookUpdate::instrument`] and
+    /// [`Subscription::instrument`] name it by.
+    pub id: String,
+    pub coin: String,
+    pub market: Market,
+    pub venues: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Market {
+    Spot,
+    Perp,
 }
 
 /// The version of this crate's scheme. A minor bump only adds to it, so a
@@ -274,25 +284,40 @@ mod tests {
 
     #[test]
     fn handshake_on_the_wire() {
-        let hello = Request::Hello {
-            version: PROTOCOL_VERSION,
-            name: "tail".into(),
-            subscriptions: vec![Subscription {
-                instrument: Some("BTC-PERP.SVP".into()),
-                trades: true,
-                books: false,
-            }],
-        };
-        let json = r#"{"type":"hello","version":{"major":1,"minor":0},"name":"tail","subscriptions":[{"instrument":"BTC-PERP.SVP","trades":true,"books":false}]}"#;
-        assert_eq!(serde_json::to_string(&hello).unwrap(), json);
-        assert_eq!(serde_json::from_str::<Request>(json).unwrap(), hello);
+        fn request(request: &Request, json: &str) {
+            assert_eq!(serde_json::to_string(request).unwrap(), json);
+            assert_eq!(&serde_json::from_str::<Request>(json).unwrap(), request);
+        }
 
+        request(
+            &Request::Hello {
+                version: PROTOCOL_VERSION,
+                name: "tail".into(),
+            },
+            r#"{"type":"hello","version":{"major":1,"minor":0},"name":"tail"}"#,
+        );
         roundtrip(
             &Message::Welcome {
                 session: 7,
                 version: PROTOCOL_VERSION,
+                instruments: vec![Instrument {
+                    id: "BTC-PERP.SVP".into(),
+                    coin: "BTC".into(),
+                    market: Market::Perp,
+                    venues: vec!["BINANCE".into(), "OKX".into()],
+                }],
             },
-            r#"{"type":"welcome","session":7,"version":{"major":1,"minor":0}}"#,
+            r#"{"type":"welcome","session":7,"version":{"major":1,"minor":0},"instruments":[{"id":"BTC-PERP.SVP","coin":"BTC","market":"perp","venues":["BINANCE","OKX"]}]}"#,
+        );
+        request(
+            &Request::Subscribe {
+                subscriptions: vec![Subscription {
+                    instrument: "BTC-PERP.SVP".into(),
+                    trades: true,
+                    books: false,
+                }],
+            },
+            r#"{"type":"subscribe","subscriptions":[{"instrument":"BTC-PERP.SVP","trades":true,"books":false}]}"#,
         );
     }
 

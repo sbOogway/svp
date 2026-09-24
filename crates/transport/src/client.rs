@@ -5,7 +5,7 @@ use std::io;
 
 use bytes::{Bytes, BytesMut};
 use futures::{Sink, SinkExt, Stream, StreamExt};
-use svp_wire::{Message, PROTOCOL_VERSION, Request, Subscription};
+use svp_wire::{Instrument, Message, PROTOCOL_VERSION, Request, Subscription};
 
 use crate::codec::{decode, encode};
 
@@ -13,6 +13,7 @@ use crate::codec::{decode, encode};
 pub struct Client<T> {
     frames: T,
     session: u64,
+    instruments: Vec<Instrument>,
 }
 
 impl<T> Client<T>
@@ -21,19 +22,22 @@ where
 {
     /// Says hello and waits for the server's welcome. A rejection is an
     /// [`io::ErrorKind::ConnectionRefused`] carrying the server's reason.
-    pub async fn connect(
-        mut frames: T,
-        name: impl Into<String>,
-        subscriptions: Vec<Subscription>,
-    ) -> io::Result<Self> {
+    pub async fn connect(mut frames: T, name: impl Into<String>) -> io::Result<Self> {
         let hello = Request::Hello {
             version: PROTOCOL_VERSION,
             name: name.into(),
-            subscriptions,
         };
         frames.send(encode(&hello)).await?;
         match read(&mut frames).await {
-            Some(Ok(Message::Welcome { session, .. })) => Ok(Self { frames, session }),
+            Some(Ok(Message::Welcome {
+                session,
+                instruments,
+                ..
+            })) => Ok(Self {
+                frames,
+                session,
+                instruments,
+            }),
             Some(Ok(Message::Reject { reason })) => {
                 Err(io::Error::new(io::ErrorKind::ConnectionRefused, reason))
             }
@@ -49,6 +53,11 @@ where
     /// The number the server's logs know this client by.
     pub fn session(&self) -> u64 {
         self.session
+    }
+
+    /// What the server offers to [`Self::subscribe`] to.
+    pub fn instruments(&self) -> &[Instrument] {
+        &self.instruments
     }
 
     /// `None` once the server has closed the connection.

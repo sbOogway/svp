@@ -30,9 +30,10 @@ static SESSIONS: AtomicU64 = AtomicU64::new(1);
 /// Serves one connection until either side ends it. `peer` is what the
 /// transport knows of the client, for the logs.
 ///
-/// Sends every subscribed book's snapshot, then what the hub broadcasts and
-/// the client subscribed to. A client that falls behind the hub's capacity
-/// gets [`Message::Resync`] and fresh snapshots instead of growing a queue.
+/// Welcomes the client with the hub's instruments, then sends what the hub
+/// broadcasts for those it subscribes to. A client that falls behind the
+/// hub's capacity gets [`Message::Resync`] and fresh snapshots instead of
+/// growing a queue.
 pub async fn serve<T>(hub: &Hub, mut frames: T, peer: &str)
 where
     T: Stream<Item = io::Result<BytesMut>> + Sink<Bytes, Error = io::Error> + Unpin,
@@ -57,7 +58,6 @@ where
 struct Hello {
     name: String,
     version: svp_wire::Version,
-    filter: Filter,
 }
 
 enum Refusal {
@@ -81,17 +81,9 @@ where
         Ok(Some(frame)) => frame.map_err(|e| Refusal::Reject(e.to_string()))?,
     };
     match decode(&frame) {
-        Ok(Request::Hello {
-            version,
-            name,
-            subscriptions,
-        }) => {
+        Ok(Request::Hello { version, name }) => {
             if PROTOCOL_VERSION.serves(version) {
-                Ok(Hello {
-                    name,
-                    version,
-                    filter: Filter::new(&subscriptions),
-                })
+                Ok(Hello { name, version })
             } else {
                 Err(Refusal::Reject(format!(
                     "protocol {version} is not served by {PROTOCOL_VERSION}"
@@ -118,6 +110,7 @@ where
     let welcome = Message::Welcome {
         session,
         version: PROTOCOL_VERSION,
+        instruments: hub.instruments().to_vec(),
     };
     if let Err(e) = frames.send(encode(&welcome)).await {
         tracing::info!("client disconnected during handshake: {e}");
@@ -125,9 +118,7 @@ where
     }
     tracing::info!(version = %hello.version, "client connected");
 
-    let end = stream(hub, &mut frames, hello.filter)
-        .await
-        .unwrap_or_else(End::Failed);
+    let end = stream(hub, &mut frames).await.unwrap_or_else(End::Failed);
     let goodbye = match end {
         End::Goodbye(reason) => {
             tracing::info!("client disconnected: {reason}");
@@ -155,12 +146,12 @@ where
     }
 }
 
-async fn stream<T>(hub: &Hub, frames: &mut T, mut filter: Filter) -> io::Result<End>
+async fn stream<T>(hub: &Hub, frames: &mut T) -> io::Result<End>
 where
     T: Stream<Item = io::Result<BytesMut>> + Sink<Bytes, Error = io::Error> + Unpin,
 {
-    let (snapshots, mut rx) = hub.subscribe(|i| filter.wants_book(i));
-    send_all(frames, &snapshots).await?;
+    let mut filter = Filter::default();
+    let (_, mut rx) = hub.subscribe(|_| false);
     let mut queue = Queue::default();
     loop {
         tokio::select! {
@@ -184,6 +175,7 @@ where
                 let Some(frame) = frame else { return Ok(End::Eof) };
                 match decode(&frame?) {
                     Ok(Request::Subscribe { subscriptions }) => {
+                        let subscriptions = offered(hub, frames, subscriptions).await?;
                         let before = filter.clone();
                         filter.add(&subscriptions);
                         tracing::debug!(?subscriptions, "subscribed");
@@ -191,6 +183,7 @@ where
                         send_all(frames, &snapshots).await?;
                     }
                     Ok(Request::Unsubscribe { subscriptions }) => {
+                        let subscriptions = offered(hub, frames, subscriptions).await?;
                         filter.remove(&subscriptions);
                         queue.remove(&subscriptions);
                         tracing::debug!(?subscriptions, "unsubscribed");
@@ -204,6 +197,28 @@ where
             }
         }
     }
+}
+
+/// The subscriptions to instruments the hub offers; the client hears of
+/// the others in a [`Message::Error`].
+async fn offered<T>(
+    hub: &Hub,
+    frames: &mut T,
+    subscriptions: Vec<Subscription>,
+) -> io::Result<Vec<Subscription>>
+where
+    T: Sink<Bytes, Error = io::Error> + Unpin,
+{
+    let (offered, unknown): (Vec<_>, Vec<_>) = subscriptions
+        .into_iter()
+        .partition(|s| hub.instruments().iter().any(|i| i.id == s.instrument));
+    if !unknown.is_empty() {
+        let ids: Vec<_> = unknown.iter().map(|s| s.instrument.as_str()).collect();
+        let reason = format!("unknown instruments: {}", ids.join(", "));
+        tracing::debug!("{reason}");
+        frames.send(encode(&Message::Error { reason })).await?;
+    }
+    Ok(offered)
 }
 
 async fn send_all<T>(frames: &mut T, messages: &[Message]) -> io::Result<()>
@@ -260,7 +275,6 @@ impl Queue {
 
 #[derive(Debug, Clone, Default)]
 struct Filter {
-    every: Kinds,
     instruments: HashMap<String, Kinds>,
 }
 
@@ -271,22 +285,13 @@ struct Kinds {
 }
 
 impl Filter {
-    fn new(subscriptions: &[Subscription]) -> Self {
-        let mut filter = Self::default();
-        filter.add(subscriptions);
-        filter
-    }
-
-    fn kinds(&mut self, instrument: Option<&String>) -> &mut Kinds {
-        match instrument {
-            None => &mut self.every,
-            Some(i) => self.instruments.entry(i.clone()).or_default(),
-        }
+    fn kinds(&mut self, instrument: &str) -> &mut Kinds {
+        self.instruments.entry(instrument.to_owned()).or_default()
     }
 
     fn add(&mut self, subscriptions: &[Subscription]) {
         for s in subscriptions {
-            let kinds = self.kinds(s.instrument.as_ref());
+            let kinds = self.kinds(&s.instrument);
             kinds.trades |= s.trades;
             kinds.books |= s.books;
         }
@@ -294,18 +299,18 @@ impl Filter {
 
     fn remove(&mut self, subscriptions: &[Subscription]) {
         for s in subscriptions {
-            let kinds = self.kinds(s.instrument.as_ref());
+            let kinds = self.kinds(&s.instrument);
             kinds.trades &= !s.trades;
             kinds.books &= !s.books;
         }
     }
 
     fn wants_trades(&self, instrument: &str) -> bool {
-        self.every.trades || self.instruments.get(instrument).is_some_and(|k| k.trades)
+        self.instruments.get(instrument).is_some_and(|k| k.trades)
     }
 
     fn wants_book(&self, instrument: &str) -> bool {
-        self.every.books || self.instruments.get(instrument).is_some_and(|k| k.books)
+        self.instruments.get(instrument).is_some_and(|k| k.books)
     }
 
     fn wants(&self, message: &Message) -> bool {
@@ -329,8 +334,8 @@ mod tests {
     use crate::{
         client::Client,
         sink::{
-            ChannelSink, Sink as _,
-            tests::{ID, px, qty, trade, update},
+            Sink as _,
+            tests::{ID, OTHER, channel, px, qty, subscription, trade, update},
         },
     };
 
@@ -352,10 +357,40 @@ mod tests {
         Framed::new(client, LengthDelimitedCodec::new())
     }
 
-    async fn connect(hub: &Hub, subscriptions: Vec<Subscription>) -> Client<Frames> {
-        Client::connect(connection(hub, 1 << 16), "test", subscriptions)
+    async fn connect(hub: &Hub) -> Client<Frames> {
+        Client::connect(connection(hub, 1 << 16), "test")
             .await
             .unwrap()
+    }
+
+    /// Subscribes, and returns once the server applied it with the snapshots
+    /// it sent: the server answers the unknown instrument that follows in
+    /// order.
+    async fn subscribe(
+        client: &mut Client<Frames>,
+        subscriptions: Vec<Subscription>,
+    ) -> Vec<Message> {
+        client.subscribe(subscriptions).await.unwrap();
+        barrier(client).await
+    }
+
+    async fn unsubscribe(client: &mut Client<Frames>, subscriptions: Vec<Subscription>) {
+        client.unsubscribe(subscriptions).await.unwrap();
+        assert_eq!(barrier(client).await, []);
+    }
+
+    async fn barrier(client: &mut Client<Frames>) -> Vec<Message> {
+        client
+            .subscribe(vec![subscription("BARRIER", true, true)])
+            .await
+            .unwrap();
+        let mut before = Vec::new();
+        loop {
+            match next(client).await {
+                Message::Error { reason } if reason.contains("BARRIER") => return before,
+                message => before.push(message),
+            }
+        }
     }
 
     async fn next(client: &mut Client<Frames>) -> Message {
@@ -377,24 +412,37 @@ mod tests {
         }
     }
 
-    fn only(instrument: &str, trades: bool, books: bool) -> Subscription {
-        Subscription {
-            instrument: Some(instrument.into()),
-            trades,
-            books,
-        }
+    fn snapshot(ts: u64, bid: &str, size: &str) -> Message {
+        Message::Book(BookUpdate {
+            instrument: ID.into(),
+            ts,
+            data: BookData::Snapshot {
+                bids: vec![(px(bid), qty(size))],
+                asks: vec![],
+            },
+        })
     }
 
     #[tokio::test]
-    async fn welcome_then_snapshots_then_messages_in_order() {
-        let (mut sink, hub) = ChannelSink::new(8);
+    async fn the_welcome_offers_the_hubs_instruments_and_nothing_streams_unasked() {
+        let (mut sink, hub) = channel(8);
         sink.send(&update(1, &[(BookSide::Bid, "100", "1")]));
-        let mut client = connect(&hub, vec![Subscription::everything()]).await;
+        let mut client = connect(&hub).await;
 
-        let Message::Book(snapshot) = next(&mut client).await else {
-            panic!("expected a snapshot first");
-        };
-        assert!(matches!(snapshot.data, BookData::Snapshot { .. }));
+        let ids: Vec<_> = client.instruments().iter().map(|i| i.id.as_str()).collect();
+        assert_eq!(ids, [ID, OTHER]);
+        sink.send(&trade(2));
+        nothing_more(&mut client).await;
+    }
+
+    #[tokio::test]
+    async fn a_subscription_starts_from_snapshots_then_messages_in_order() {
+        let (mut sink, hub) = channel(8);
+        sink.send(&update(1, &[(BookSide::Bid, "100", "1")]));
+        let mut client = connect(&hub).await;
+
+        let snapshots = subscribe(&mut client, vec![subscription(ID, true, true)]).await;
+        assert_eq!(snapshots, [snapshot(1, "100", "1")]);
 
         sink.send(&trade(2));
         sink.send(&update(3, &[(BookSide::Ask, "101", "1")]));
@@ -407,15 +455,15 @@ mod tests {
 
     #[tokio::test]
     async fn sessions_are_numbered() {
-        let (_sink, hub) = ChannelSink::new(8);
-        let a = connect(&hub, vec![]).await;
-        let b = connect(&hub, vec![]).await;
+        let (_sink, hub) = channel(8);
+        let a = connect(&hub).await;
+        let b = connect(&hub).await;
         assert!(b.session() > a.session());
     }
 
     #[tokio::test]
     async fn an_unserved_version_is_rejected() {
-        let (_sink, hub) = ChannelSink::new(8);
+        let (_sink, hub) = channel(8);
         let mut frames = connection(&hub, 1 << 16);
         let hello = Request::Hello {
             version: Version {
@@ -423,7 +471,6 @@ mod tests {
                 minor: 0,
             },
             name: "future".into(),
-            subscriptions: vec![],
         };
         frames.send(encode(&hello)).await.unwrap();
         let reply = frames.next().await.unwrap().unwrap();
@@ -433,7 +480,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_request_before_hello_is_rejected() {
-        let (_sink, hub) = ChannelSink::new(8);
+        let (_sink, hub) = channel(8);
         let mut frames = connection(&hub, 1 << 16);
         let goodbye = Request::Goodbye {
             reason: "hi".into(),
@@ -445,12 +492,11 @@ mod tests {
 
     #[tokio::test]
     async fn a_second_hello_ends_with_goodbye() {
-        let (_sink, hub) = ChannelSink::new(8);
+        let (_sink, hub) = channel(8);
         let mut frames = connection(&hub, 1 << 16);
         let hello = Request::Hello {
             version: PROTOCOL_VERSION,
             name: "twice".into(),
-            subscriptions: vec![],
         };
         frames.send(encode(&hello)).await.unwrap();
         let welcome = frames.next().await.unwrap().unwrap();
@@ -461,46 +507,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn an_unknown_instrument_is_an_error_and_the_rest_applies() {
+        let (mut sink, hub) = channel(8);
+        let mut client = connect(&hub).await;
+
+        client
+            .subscribe(vec![
+                subscription("NOPE", true, true),
+                subscription(ID, true, false),
+            ])
+            .await
+            .unwrap();
+        assert_eq!(
+            next(&mut client).await,
+            Message::Error {
+                reason: "unknown instruments: NOPE".into()
+            }
+        );
+        sink.send(&trade(1));
+        assert_eq!(next(&mut client).await, trade(1));
+    }
+
+    #[tokio::test]
     async fn only_subscribed_kinds_and_instruments_arrive() {
-        let (mut sink, hub) = ChannelSink::new(8);
+        let (mut sink, hub) = channel(8);
         sink.send(&update(1, &[(BookSide::Bid, "100", "1")]));
-        let mut client = connect(&hub, vec![only(ID, true, false)]).await;
+        let mut client = connect(&hub).await;
+        assert_eq!(
+            subscribe(&mut client, vec![subscription(ID, true, false)]).await,
+            []
+        );
 
         sink.send(&update(2, &[(BookSide::Bid, "100", "2")]));
         sink.send(&trade(3));
-        assert_eq!(next(&mut client).await, trade(3), "no snapshot, no update");
+        assert_eq!(next(&mut client).await, trade(3), "no update");
 
-        client
-            .unsubscribe(vec![only(ID, true, false)])
-            .await
-            .unwrap();
-        client
-            .subscribe(vec![only("ETH-PERP.SVP", true, true)])
-            .await
-            .unwrap();
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        unsubscribe(&mut client, vec![subscription(ID, true, false)]).await;
+        subscribe(&mut client, vec![subscription(OTHER, true, true)]).await;
         sink.send(&trade(4));
         nothing_more(&mut client).await;
     }
 
     #[tokio::test]
     async fn subscribing_to_a_book_starts_it_from_a_snapshot() {
-        let (mut sink, hub) = ChannelSink::new(8);
+        let (mut sink, hub) = channel(8);
         sink.send(&update(1, &[(BookSide::Bid, "100", "1")]));
-        let mut client = connect(&hub, vec![only(ID, true, false)]).await;
+        let mut client = connect(&hub).await;
+        subscribe(&mut client, vec![subscription(ID, true, false)]).await;
 
-        client.subscribe(vec![only(ID, false, true)]).await.unwrap();
-        assert_eq!(
-            next(&mut client).await,
-            Message::Book(BookUpdate {
-                instrument: ID.into(),
-                ts: 1,
-                data: BookData::Snapshot {
-                    bids: vec![(px("100"), qty("1"))],
-                    asks: vec![],
-                },
-            })
-        );
+        let snapshots = subscribe(&mut client, vec![subscription(ID, false, true)]).await;
+        assert_eq!(snapshots, [snapshot(1, "100", "1")]);
         sink.send(&update(2, &[(BookSide::Ask, "101", "1")]));
         assert_eq!(
             next(&mut client).await,
@@ -510,15 +566,16 @@ mod tests {
 
     #[tokio::test]
     async fn updates_queued_before_a_subscription_are_not_applied_twice() {
-        let (mut sink, hub) = ChannelSink::new(64);
-        let mut filter = Filter::new(&[only(ID, true, false)]);
+        let (mut sink, hub) = channel(64);
+        let mut filter = Filter::default();
+        filter.add(&[subscription(ID, true, false)]);
         let (_, mut rx) = hub.subscribe(|i| filter.wants_book(i));
         sink.send(&update(1, &[(BookSide::Bid, "100", "1")]));
         sink.send(&trade(2));
 
         let mut queue = Queue::default();
         let before = filter.clone();
-        filter.add(&[only(ID, false, true)]);
+        filter.add(&[subscription(ID, false, true)]);
         let snapshots = queue.catch_up(&hub, &rx, before, &filter);
         sink.send(&update(3, &[(BookSide::Bid, "100", "0")]));
 
@@ -528,17 +585,19 @@ mod tests {
                 passed.push(message);
             }
         }
-        assert_eq!(passed.len(), 3, "snapshot, trade 2, update 3: {passed:?}");
-        assert!(
-            matches!(&passed[0], Message::Book(b) if matches!(b.data, BookData::Snapshot { .. }))
+        assert_eq!(
+            passed,
+            [
+                snapshot(1, "100", "1"),
+                trade(2),
+                update(3, &[(BookSide::Bid, "100", "0")])
+            ]
         );
-        assert_eq!(passed[1], trade(2));
-        assert_eq!(passed[2], update(3, &[(BookSide::Bid, "100", "0")]));
     }
 
     #[tokio::test]
     async fn a_client_goodbye_ends_the_session() {
-        let (_sink, hub) = ChannelSink::new(8);
+        let (_sink, hub) = channel(8);
         let (client, server) = tokio::io::duplex(1 << 16);
         let session = tokio::spawn(async move {
             serve(
@@ -548,13 +607,9 @@ mod tests {
             )
             .await;
         });
-        let client = Client::connect(
-            Framed::new(client, LengthDelimitedCodec::new()),
-            "test",
-            vec![],
-        )
-        .await
-        .unwrap();
+        let client = Client::connect(Framed::new(client, LengthDelimitedCodec::new()), "test")
+            .await
+            .unwrap();
         client.goodbye("done").await.unwrap();
         tokio::time::timeout(Duration::from_secs(1), session)
             .await
@@ -564,14 +619,11 @@ mod tests {
 
     #[tokio::test]
     async fn a_slow_client_resyncs_from_snapshots() {
-        let (mut sink, hub) = ChannelSink::new(4);
-        let mut client = Client::connect(
-            connection(&hub, 64),
-            "slow",
-            vec![Subscription::everything()],
-        )
-        .await
-        .unwrap();
+        let (mut sink, hub) = channel(4);
+        let mut client = Client::connect(connection(&hub, 1 << 10), "slow")
+            .await
+            .unwrap();
+        subscribe(&mut client, vec![subscription(ID, true, true)]).await;
 
         // The client reads nothing while the book moves far past the capacity.
         for i in 0..50_u32 {
