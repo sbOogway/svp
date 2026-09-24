@@ -11,11 +11,11 @@ and the [architecture decisions](https://github.com/sbOogway/svp/wiki/Architectu
 ## Layout
 
 ```
-crates/protocol   wire types shared by the server and the app
-crates/core       Nautilus live node, aggregation actor, broadcast bridge
-crates/server     axum REST + WebSocket server, binary `svp`
-scripts/          setup and git hooks
-prek.toml         git hooks = local CI (there is no hosted CI, by design)
+crates/protocol     wire types shared by the server and the app
+crates/aggregator   Nautilus live node: venues merged into one instrument, published to sinks
+crates/server       axum REST + WebSocket server, binary `svp`
+scripts/            setup and git hooks
+prek.toml           git hooks = local CI (there is no hosted CI, by design)
 ```
 
 ## Getting started
@@ -34,7 +34,7 @@ Logging: the node and svp's actors log through Nautilus, configured with
 
 ```sh
 # every unified trade and merged book delta, and nothing but svp's own logs
-NAUTILUS_LOG="stdout=Debug;log_components_only;svp_core::=Debug" cargo run
+NAUTILUS_LOG="stdout=Debug;log_components_only;svp_aggregator::=Debug" cargo run
 # everything at debug, Nautilus included (very verbose)
 NAUTILUS_LOG="stdout=Debug" cargo run
 ```

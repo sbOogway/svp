@@ -1,6 +1,6 @@
 [package]
-name = "svp-core"
-description = "Market data ingestion and bar aggregation (Nautilus Trader actor and bridge)"
+name = "svp-aggregator"
+description = "Merges trades and L2 books from many venues into one instrument per coin (Nautilus Trader)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
