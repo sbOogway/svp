@@ -7,6 +7,24 @@
 //! and closes. The client then subscribes to what it wants from that list,
 //! and either side ends with a `Goodbye`.
 //!
+//! ```text
+//! client                                        server
+//!   |-- Hello {version, name} -------------------->|
+//!   |<--------------------------- Reject {reason} -|  can't serve it, closes
+//!   |<--------- Welcome {session, instruments} ----|
+//!   |                                              |
+//!   |-- Subscribe {subscriptions} ---------------->|
+//!   |<---------------------------- Error {reason} -|  unknown instruments
+//!   |<------------------------- Book (snapshot) ---|  per newly received book
+//!   |<--------------------- Trade, Book (update) --|  ...
+//!   |<--------------------------- Resync {missed} -|  client fell behind,
+//!   |<------------------------- Book (snapshot) ---|  books start over
+//!   |-- Unsubscribe {subscriptions} -------------->|
+//!   |                                              |
+//!   |-- Goodbye {reason} ------------------------->|  either side ends it
+//!   |<-------------------------- Goodbye {reason} -|
+//! ```
+//!
 //! Each one travels as a frame of `MessagePack` ([`encode`], [`decode`]);
 //! how frames are carried is up to the transport.
 
