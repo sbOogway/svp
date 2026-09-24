@@ -29,9 +29,15 @@ make ci                # + tests, audit  (what pre-push runs)
 cargo run              # merges BTC perp trades and books from every venue into BTC-PERP.SVP, logs volume per minute
 ```
 
-Logging: Nautilus components log through the `log` crate, configured with
-`NAUTILUS_LOG` (e.g. `NAUTILUS_LOG="stdout=Debug"`); svp's own code logs through
-`tracing`, filtered with `RUST_LOG`.
+Logging: the node and svp's actors log through Nautilus, configured with
+`NAUTILUS_LOG`; the server's startup logs through `tracing`, filtered with `RUST_LOG`.
+
+```sh
+# every unified trade and merged book delta, and nothing but svp's own logs
+NAUTILUS_LOG="stdout=Debug;log_components_only;svp_core::=Debug" cargo run
+# everything at debug, Nautilus included (very verbose)
+NAUTILUS_LOG="stdout=Debug" cargo run
+```
 
 ## Licensing
 

@@ -9,7 +9,7 @@ use nautilus_common::{
 use nautilus_core::DurationNanos;
 use nautilus_model::{
     data::{OrderBookDeltas, TradeTick},
-    enums::BookType,
+    enums::{BookType, OrderSide},
     identifiers::{ActorId, InstrumentId},
     instruments::{Instrument, InstrumentAny},
 };
@@ -218,6 +218,14 @@ impl DataActor for Unifier {
             return Ok(());
         };
         let trade = unify_trade(trade, venue_instrument, &built.instrument);
+        log::debug!(
+            "trade {} {:?} {} @ {} id={}",
+            trade.instrument_id,
+            trade.aggressor_side,
+            trade.size,
+            trade.price,
+            trade.trade_id
+        );
         self.cache_rc().borrow_mut().add_trade(trade)?;
         msgbus::publish_trade(switchboard::get_trades_topic(trade.instrument_id), &trade);
         Ok(())
@@ -238,6 +246,23 @@ impl DataActor for Unifier {
             .book
             .apply(deltas, venue_instrument.multiplier(), ts_init)
         {
+            if log::log_enabled!(log::Level::Debug) {
+                for delta in &merged.deltas {
+                    log::debug!(
+                        "book {} {:?} {} {} {} from {}",
+                        delta.instrument_id,
+                        delta.action,
+                        if delta.order.side == Some(OrderSide::Buy) {
+                            "bid"
+                        } else {
+                            "ask"
+                        },
+                        delta.order.price,
+                        delta.order.size,
+                        deltas.instrument_id
+                    );
+                }
+            }
             msgbus::publish_deltas(
                 switchboard::get_book_deltas_topic(merged.instrument_id),
                 &merged,
