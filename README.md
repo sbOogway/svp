@@ -25,7 +25,7 @@ Logging: the node and svp's actors log through Nautilus, configured with
 
 ```sh
 # every unified trade and merged book delta, and nothing but svp's own logs
-NAUTILUS_LOG="stdout=Debug;log_components_only;svp_aggregator::=Debug;svp_transport::=Debug" cargo run
+NAUTILUS_LOG="stdout=Debug;log_components_only;svp_aggregator::=Debug" cargo run
 # everything at debug, Nautilus included (very verbose)
 NAUTILUS_LOG="stdout=Debug" cargo run
 ```

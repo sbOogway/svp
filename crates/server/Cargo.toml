@@ -1,6 +1,6 @@
 [package]
 name = "svp-server"
-description = "svp server binary: runs the aggregator and serves clients over a Unix socket"
+description = "svp server binary: runs the aggregator and serves its clients the svp protocol over a Unix socket"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,10 +15,19 @@ path = "src/main.rs"
 [dependencies]
 svp-aggregator = { workspace = true }
 svp-transport = { workspace = true }
+svp-wire = { workspace = true }
 anyhow = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+svp-client = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["io-util"] }
+tokio-util = { workspace = true }
 
 [lints]
 workspace = true
