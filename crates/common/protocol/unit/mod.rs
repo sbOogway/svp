@@ -42,7 +42,8 @@ fn parse_units(s: &str, scale: i32) -> Result<i64, ParseUnitsError> {
 }
 
 /// Exact, without trailing zeros.
-fn fmt_units(units: i64, scale: i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+/// With `pad`, every decimal of `scale` is written, trailing zeros too.
+fn fmt_units(units: i64, scale: i32, pad: bool, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     let scale = u32::try_from(scale).expect("scales are positive");
     let one = 10_u64.pow(scale);
     let magnitude = units.unsigned_abs();
@@ -51,15 +52,19 @@ fn fmt_units(units: i64, scale: i32, f: &mut fmt::Formatter<'_>) -> fmt::Result 
     }
     write!(f, "{}", magnitude / one)?;
     let fraction = magnitude % one;
-    if fraction == 0 {
+    if fraction == 0 && !pad {
         return Ok(());
     }
     let fraction = format!("{fraction:0width$}", width = scale as usize);
-    write!(f, ".{}", fraction.trim_end_matches('0'))
+    if pad {
+        write!(f, ".{fraction}")
+    } else {
+        write!(f, ".{}", fraction.trim_end_matches('0'))
+    }
 }
 
 macro_rules! decimal_strings {
-    ($name:ident, $scale:expr) => {
+    ($name:ident, $scale:expr, $pad:expr) => {
         impl FromStr for $name {
             type Err = ParseUnitsError;
 
@@ -70,15 +75,16 @@ macro_rules! decimal_strings {
 
         impl fmt::Display for $name {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                fmt_units(self.units, $scale, f)
+                fmt_units(self.units, $scale, $pad, f)
             }
         }
     };
 }
 
-decimal_strings!(Price, Price::ATOMIC_SCALE);
-decimal_strings!(PriceStep, Price::ATOMIC_SCALE);
-decimal_strings!(Quantity, Quantity::QTY_SCALE);
+decimal_strings!(Price, Price::ATOMIC_SCALE, false);
+decimal_strings!(PriceStep, Price::ATOMIC_SCALE, false);
+// Sizes line up in logs and columns: always all eight decimals.
+decimal_strings!(Quantity, Quantity::QTY_SCALE, true);
 
 #[cfg(test)]
 mod tests {
@@ -112,8 +118,10 @@ mod tests {
         );
         assert_eq!(px("83470.90").to_string(), "83470.9");
         assert_eq!(px("-0.5").to_string(), "-0.5");
-        assert_eq!(qty("12").to_string(), "12");
-        assert_eq!(Quantity::ZERO.to_string(), "0");
+        assert_eq!(qty("12").to_string(), "12.00000000");
+        assert_eq!(qty("0.02").to_string(), "0.02000000");
+        assert_eq!(qty("-0.00000001").to_string(), "-0.00000001");
+        assert_eq!(Quantity::ZERO.to_string(), "0.00000000");
     }
 
     #[test]
