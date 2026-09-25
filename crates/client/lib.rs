@@ -11,7 +11,7 @@ use std::{io, path::Path};
 pub use session::Client;
 pub use svp_common::{
     protocol,
-    unix::{Connection, default_path},
+    unix::{Connection, default_path, socket_path},
 };
 
 /// Connects over the server's Unix socket and says hello.

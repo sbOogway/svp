@@ -15,6 +15,11 @@ path = "lib.rs"
 name = "svp-mock-client"
 path = "bin/svp-mock-client.rs"
 
+[[bin]]
+name = "svp-app"
+path = "bin/svp-app.rs"
+required-features = ["app"]
+
 [features]
 app = ["dep:iced"]
 
