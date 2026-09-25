@@ -9,8 +9,8 @@ use std::time::Duration;
 use iced::{
     Alignment, Element, Length, Theme,
     widget::{
-        button, checkbox, column, container, pane_grid, pick_list, radio, row, rule, slider, text,
-        tooltip::Position,
+        button, checkbox, column, container, pane_grid, pick_list, radio, row, rule, scrollable,
+        slider, text, tooltip::Position,
     },
 };
 
@@ -31,6 +31,10 @@ fn cfg_view_container<'a>(
     max_width: u32,
     content: impl Into<Element<'a, Message>>,
 ) -> Element<'a, Message> {
+    let content = scrollable::Scrollable::with_direction(
+        content,
+        scrollable::Direction::Vertical(scrollable::Scrollbar::new().width(4).scroller_width(4)),
+    );
     container(content)
         .width(Length::Shrink)
         .padding(28)
