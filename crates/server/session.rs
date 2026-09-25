@@ -485,21 +485,33 @@ mod tests {
         assert!(b.session() > a.session());
     }
 
-    #[tokio::test]
-    async fn an_unserved_version_is_rejected() {
+    async fn assert_rejected(version: Version) {
         let (_sink, hub) = channel(8);
         let mut frames = connection(&hub, 1 << 16);
         let hello = Request::Hello {
-            version: Version {
-                major: PROTOCOL_VERSION.major + 1,
-                minor: 0,
-            },
-            name: "future".into(),
+            version,
+            name: "other".into(),
         };
         frames.send(encode(&hello)).await.unwrap();
         let reply = frames.next().await.unwrap().unwrap();
         assert!(matches!(decode(&reply).unwrap(), Message::Reject { .. }));
         assert!(frames.next().await.is_none(), "the server closes");
+    }
+
+    #[tokio::test]
+    async fn an_unserved_version_is_rejected() {
+        assert_rejected(Version {
+            major: PROTOCOL_VERSION.major + 1,
+            minor: 0,
+        })
+        .await;
+    }
+
+    // 1.x sent prices and sizes as decimal strings.
+    #[tokio::test]
+    async fn a_1_x_client_is_rejected() {
+        assert_eq!(PROTOCOL_VERSION, Version { major: 2, minor: 0 });
+        assert_rejected(Version { major: 1, minor: 0 }).await;
     }
 
     #[tokio::test]

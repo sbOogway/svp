@@ -29,13 +29,13 @@
 //! how frames are carried is up to the transport.
 
 mod codec;
-mod decimal;
+mod unit;
 
 use std::collections::BTreeMap;
 
 pub use codec::{DecodeError, decode, encode};
-pub use decimal::{Decimal, DecimalError, Price, Quantity};
 use serde::{Deserialize, Serialize};
+pub use unit::{ParseUnitsError, Price, PriceStep, Quantity};
 
 /// Identifies a bar stream as `venue:symbol:timeframe`, e.g. `BINANCE:BTCUSDT-PERP:1m`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -118,7 +118,7 @@ pub enum Market {
 
 /// The version of this crate's scheme. A minor bump only adds to it, so a
 /// server serves clients of its major and any minor up to its own.
-pub const PROTOCOL_VERSION: Version = Version { major: 1, minor: 0 };
+pub const PROTOCOL_VERSION: Version = Version { major: 2, minor: 0 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Version {
@@ -139,7 +139,7 @@ impl std::fmt::Display for Version {
 }
 
 /// Prices in USD, sizes in coins, timestamps in UNIX nanoseconds. Prices
-/// and sizes are exact, as decimal strings on the wire.
+/// and sizes are exact, as integer [units](Price::units) on the wire.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Trade {
     pub instrument: String,
@@ -209,7 +209,7 @@ impl Book {
                         BookSide::Bid => &mut self.bids,
                         BookSide::Ask => &mut self.asks,
                     };
-                    if size.is_zero() {
+                    if size.units == 0 {
                         book.remove(&price);
                     } else {
                         book.insert(price, size);
@@ -262,7 +262,7 @@ mod tests {
                 aggressor: Some(Side::Sell),
                 id: "96728d723fa5443eadbaa76d67f9515a-CBS".into(),
             }),
-            r#"{"type":"trade","instrument":"BTC-PERP.SVP","ts":1,"price":"83471.5","size":"0.250","aggressor":"sell","id":"96728d723fa5443eadbaa76d67f9515a-CBS"}"#,
+            r#"{"type":"trade","instrument":"BTC-PERP.SVP","ts":1,"price":8347150000000000,"size":25000000,"aggressor":"sell","id":"96728d723fa5443eadbaa76d67f9515a-CBS"}"#,
         );
     }
 
@@ -277,7 +277,7 @@ mod tests {
                     asks: vec![(px("83472.0"), qty("0.5"))],
                 },
             }),
-            r#"{"type":"book","instrument":"BTC-PERP.SVP","ts":1,"kind":"snapshot","bids":[["83471.0","1.2"]],"asks":[["83472.0","0.5"]]}"#,
+            r#"{"type":"book","instrument":"BTC-PERP.SVP","ts":1,"kind":"snapshot","bids":[[8347100000000000,120000000]],"asks":[[8347200000000000,50000000]]}"#,
         );
         roundtrip(
             &Message::Book(BookUpdate {
@@ -290,7 +290,7 @@ mod tests {
                     ],
                 },
             }),
-            r#"{"type":"book","instrument":"BTC-PERP.SVP","ts":2,"kind":"update","levels":[["bid","83470.9","0.4"],["ask","83472.0","0"]]}"#,
+            r#"{"type":"book","instrument":"BTC-PERP.SVP","ts":2,"kind":"update","levels":[["bid",8347090000000000,40000000],["ask",8347200000000000,0]]}"#,
         );
     }
 
@@ -314,7 +314,7 @@ mod tests {
                 version: PROTOCOL_VERSION,
                 name: "tail".into(),
             },
-            r#"{"type":"hello","version":{"major":1,"minor":0},"name":"tail"}"#,
+            r#"{"type":"hello","version":{"major":2,"minor":0},"name":"tail"}"#,
         );
         roundtrip(
             &Message::Welcome {
@@ -327,7 +327,7 @@ mod tests {
                     venues: vec!["BINANCE".into(), "OKX".into()],
                 }],
             },
-            r#"{"type":"welcome","session":7,"version":{"major":1,"minor":0},"instruments":[{"id":"BTC-PERP.SVP","coin":"BTC","market":"perp","venues":["BINANCE","OKX"]}]}"#,
+            r#"{"type":"welcome","session":7,"version":{"major":2,"minor":0},"instruments":[{"id":"BTC-PERP.SVP","coin":"BTC","market":"perp","venues":["BINANCE","OKX"]}]}"#,
         );
         request(
             &Request::Subscribe {
@@ -352,29 +352,25 @@ mod tests {
     }
 
     #[test]
-    fn message_pack_keeps_values_a_float_cannot_hold() {
-        let sum = qty("0.1") + qty("0.2");
+    fn message_pack_carries_units_as_integers() {
+        #[derive(Deserialize)]
+        struct Units {
+            price: i64,
+            size: i64,
+        }
         let message = Message::Trade(Trade {
             instrument: "BTC-PERP.SVP".into(),
             ts: 1,
             price: px("83470.9"),
-            size: sum,
+            size: qty("0.1") + qty("0.2"),
             aggressor: None,
             id: "abc-BIN".into(),
         });
         let bytes = rmp_serde::to_vec_named(&message).unwrap();
-        let Message::Trade(trade) = rmp_serde::from_slice(&bytes).unwrap() else {
-            panic!("expected a trade");
-        };
-        assert_eq!(
-            trade.price.as_decimal().serialize(),
-            px("83470.9").as_decimal().serialize()
-        );
-        assert_eq!(
-            trade.size.as_decimal().serialize(),
-            sum.as_decimal().serialize()
-        );
-        assert_eq!(trade.size.to_string(), "0.3");
+        let units: Units = rmp_serde::from_slice(&bytes).unwrap();
+        assert_eq!(units.price, 8_347_090_000_000_000);
+        assert_eq!(units.size, 30_000_000);
+        assert_eq!(rmp_serde::from_slice::<Message>(&bytes).unwrap(), message);
     }
 
     #[test]

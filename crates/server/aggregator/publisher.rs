@@ -9,6 +9,7 @@ use nautilus_model::{
     data::{OrderBookDeltas, TradeTick},
     enums::{AggressorSide, BookAction, BookType, OrderSide},
     identifiers::{ActorId, InstrumentId},
+    types::{Price, Quantity, fixed::FIXED_PRECISION, price::PriceRaw, quantity::QuantityRaw},
 };
 use svp_common::protocol::{self, BookData, BookSide, BookUpdate, Message, Side, Trade};
 
@@ -63,7 +64,9 @@ impl DataActor for Publisher {
     }
 
     fn on_trade(&mut self, trade: &TradeTick) -> anyhow::Result<()> {
-        self.send(&trade_message(trade));
+        if let Some(message) = trade_message(trade) {
+            self.send(&message);
+        }
         Ok(())
     }
 
@@ -75,22 +78,64 @@ impl DataActor for Publisher {
     }
 }
 
-pub fn trade_message(trade: &TradeTick) -> Message {
-    Message::Trade(Trade {
+const PRICE_UNIT: PriceRaw = PriceRaw::pow(
+    10,
+    FIXED_PRECISION as u32 - protocol::Price::ATOMIC_SCALE as u32,
+);
+const SIZE_UNIT: QuantityRaw = QuantityRaw::pow(
+    10,
+    FIXED_PRECISION as u32 - protocol::Quantity::QTY_SCALE as u32,
+);
+
+/// The nearest unit, half away from zero; `None` past an `i64`.
+pub fn price_units(price: Price) -> Option<protocol::Price> {
+    let raw = price.raw();
+    let half = PRICE_UNIT / 2;
+    let rounded = if raw < 0 {
+        raw.saturating_sub(half)
+    } else {
+        raw.saturating_add(half)
+    };
+    i64::try_from(rounded / PRICE_UNIT)
+        .ok()
+        .map(protocol::Price::from_units)
+}
+
+/// The nearest unit, half up; `None` past an `i64`.
+pub fn size_units(size: Quantity) -> Option<protocol::Quantity> {
+    let rounded = size.raw().saturating_add(SIZE_UNIT / 2);
+    i64::try_from(rounded / SIZE_UNIT)
+        .ok()
+        .map(protocol::Quantity::from_units)
+}
+
+/// `None`, logged, when the price or size doesn't fit in units.
+pub fn trade_message(trade: &TradeTick) -> Option<Message> {
+    let (Some(price), Some(size)) = (price_units(trade.price), size_units(trade.size)) else {
+        log::warn!(
+            "{} trade {} at {} dropped: out of range",
+            trade.size,
+            trade.instrument_id,
+            trade.price
+        );
+        return None;
+    };
+    Some(Message::Trade(Trade {
         instrument: trade.instrument_id.to_string(),
         ts: trade.ts_event.as_u64(),
-        price: trade.price.as_decimal().into(),
-        size: trade.size.as_decimal().into(),
+        price,
+        size,
         aggressor: match trade.aggressor_side {
             AggressorSide::Buy => Some(Side::Buy),
             AggressorSide::Sell => Some(Side::Sell),
             AggressorSide::NoAggressor => None,
         },
         id: trade.trade_id.to_string(),
-    })
+    }))
 }
 
-/// A batch as level updates; a clear starts over with an empty snapshot.
+/// A batch as level updates; a clear starts over with an empty snapshot. A
+/// level whose price or size doesn't fit in units is logged and dropped.
 pub fn book_messages(deltas: &OrderBookDeltas) -> Vec<Message> {
     let instrument = deltas.instrument_id.to_string();
     let ts = deltas.ts_event.as_u64();
@@ -122,10 +167,19 @@ pub fn book_messages(deltas: &OrderBookDeltas) -> Vec<Message> {
             None => continue,
         };
         let size = match delta.action {
-            BookAction::Delete => protocol::Quantity::ZERO,
-            _ => delta.order.size.as_decimal().into(),
+            BookAction::Delete => Some(protocol::Quantity::ZERO),
+            _ => size_units(delta.order.size),
         };
-        levels.push((book_side, delta.order.price.as_decimal().into(), size));
+        let (Some(price), Some(size)) = (price_units(delta.order.price), size) else {
+            log::warn!(
+                "{} level of {} at {} dropped: out of range",
+                delta.order.size,
+                deltas.instrument_id,
+                delta.order.price
+            );
+            continue;
+        };
+        levels.push((book_side, price, size));
     }
     if !levels.is_empty() {
         messages.push(message(BookData::Update { levels }));
@@ -138,10 +192,7 @@ mod tests {
     use nautilus_model::{
         data::{BookOrder, OrderBookDelta},
         identifiers::TradeId,
-        types::{
-            Price, Quantity, fixed::FIXED_PRECISION, price::PRICE_RAW_MAX,
-            quantity::QUANTITY_RAW_MAX,
-        },
+        types::{price::PRICE_RAW_MAX, quantity::QUANTITY_RAW_MAX},
     };
 
     use super::*;
@@ -193,7 +244,7 @@ mod tests {
             7.into(),
         );
         assert_eq!(
-            trade_message(&trade),
+            trade_message(&trade).unwrap(),
             Message::Trade(Trade {
                 instrument: ID.into(),
                 ts: 7,
@@ -246,56 +297,91 @@ mod tests {
         );
     }
 
+    fn units(price: &str) -> Option<protocol::Price> {
+        price_units(Price::from(price))
+    }
+
+    fn size(quantity: &str) -> Option<protocol::Quantity> {
+        size_units(Quantity::from(quantity))
+    }
+
     #[test]
-    fn keeps_trailing_zeros() {
+    fn keeps_values_within_the_scale_exactly() {
+        assert_eq!(units("83470.9"), Some(px("83470.9")));
+        assert_eq!(units("83470.90000000000"), Some(px("83470.9")));
+        assert_eq!(units("-0.00000000001"), Some(px("-0.00000000001")));
+        assert_eq!(size("0.00000001"), Some(qty("0.00000001")));
+        assert_eq!(size("3"), Some(qty("3")));
+    }
+
+    // Prices converted to USD through a stablecoin rate get extra decimals.
+    #[test]
+    fn rounds_values_past_the_scale_to_the_nearest_unit() {
+        assert_eq!(units("1.0000000000049"), Some(px("1")));
+        assert_eq!(units("1.000000000005"), Some(px("1.00000000001")));
+        assert_eq!(units("-1.000000000005"), Some(px("-1.00000000001")));
+        assert_eq!(units("-1.0000000000049"), Some(px("-1")));
+        assert_eq!(size("0.123456784999"), Some(qty("0.12345678")));
+        assert_eq!(size("0.123456785"), Some(qty("0.12345679")));
+    }
+
+    #[test]
+    fn values_past_an_i64_are_none() {
+        assert_eq!(
+            units("92233720.36854775807"),
+            Some(protocol::Price::from_units(i64::MAX))
+        );
+        assert_eq!(units("92233720.36854775808"), None);
+        assert_eq!(units("92233720.368547758075"), None);
+        assert_eq!(
+            units("-92233720.36854775808"),
+            Some(protocol::Price::from_units(i64::MIN))
+        );
+        assert_eq!(units("-92233720.36854775809"), None);
+        assert_eq!(
+            size("92233720368.54775807"),
+            Some(protocol::Quantity::from_units(i64::MAX))
+        );
+        assert_eq!(size("92233720368.54775808"), None);
+    }
+
+    // At precision 16 the largest Nautilus values need 30 digits; none fit.
+    #[test]
+    fn the_largest_values_are_none_at_every_precision() {
+        for precision in 0..=FIXED_PRECISION {
+            let price = Price::from_raw(PRICE_RAW_MAX, precision);
+            assert_eq!(price_units(price), None, "price at precision {precision}");
+            let price = Price::from_raw(-PRICE_RAW_MAX, precision);
+            assert_eq!(price_units(price), None, "price at precision {precision}");
+            let size = Quantity::from_raw(QUANTITY_RAW_MAX, precision);
+            assert_eq!(size_units(size), None, "size at precision {precision}");
+        }
+    }
+
+    #[test]
+    fn an_out_of_range_trade_or_level_is_dropped() {
         let trade = TradeTick::new(
             InstrumentId::from(ID),
-            Price::from("83470.900"),
-            Quantity::from("0.30000000"),
-            AggressorSide::NoAggressor,
+            Price::from("100000000"),
+            Quantity::from("1"),
+            AggressorSide::Buy,
             TradeId::from("abc-BIN"),
             7.into(),
             7.into(),
         );
-        let Message::Trade(converted) = trade_message(&trade) else {
-            panic!("expected a trade");
-        };
-        assert_eq!(converted.price.to_string(), "83470.900");
-        assert_eq!(converted.size.to_string(), "0.30000000");
-    }
+        assert_eq!(trade_message(&trade), None);
 
-    /// `digits` with a decimal point `precision` digits from the right.
-    fn with_point(digits: &str, precision: u8) -> String {
-        let precision = usize::from(precision);
-        let digits = format!("{digits:0>width$}", width = precision + 1);
-        let (whole, fraction) = digits.split_at(digits.len() - precision);
-        if fraction.is_empty() {
-            whole.to_string()
-        } else {
-            format!("{whole}.{fraction}")
-        }
-    }
-
-    // One below the largest, so every digit is significant. At precision 16
-    // those need 30 digits, more than a `Decimal` holds.
-    #[test]
-    fn converts_the_largest_values_exactly_up_to_precision_15() {
-        for precision in 0..FIXED_PRECISION {
-            let unit = 10_i128.pow(u32::from(FIXED_PRECISION - precision));
-            let raw = PRICE_RAW_MAX / unit * unit - unit;
-            assert_eq!(
-                protocol::Price::from(Price::from_raw(raw, precision).as_decimal()).to_string(),
-                with_point(&(raw / unit).to_string(), precision),
-                "price at precision {precision}"
-            );
-            let unit = 10_u128.pow(u32::from(FIXED_PRECISION - precision));
-            let raw = QUANTITY_RAW_MAX / unit * unit - unit;
-            assert_eq!(
-                protocol::Quantity::from(Quantity::from_raw(raw, precision).as_decimal())
-                    .to_string(),
-                with_point(&(raw / unit).to_string(), precision),
-                "size at precision {precision}"
-            );
-        }
+        let deltas = OrderBookDeltas::new(
+            InstrumentId::from(ID),
+            vec![
+                delta(BookAction::Add, OrderSide::Sell, "100000000", "1"),
+                delta(BookAction::Add, OrderSide::Buy, "100.0", "100000000000"),
+                delta(BookAction::Add, OrderSide::Buy, "100.0", "1"),
+            ],
+        );
+        assert_eq!(
+            book_messages(&deltas),
+            [update(&[(BookSide::Bid, "100.0", "1")])]
+        );
     }
 }
