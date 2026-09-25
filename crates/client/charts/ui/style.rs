@@ -1,6 +1,6 @@
 // Adapted from flowsurface, https://github.com/flowsurface-rs/flowsurface
 // (src/style.rs, data/src/config/theme.rs @ ab8f3c1), GPL-3.0-or-later,
-// by the flowsurface contributors.
+// by the flowsurface contributors. The palette is svp's own, light.
 
 use iced::{
     Border, Color, Font, Renderer, Shadow, Theme,
@@ -37,10 +37,10 @@ pub fn theme() -> Theme {
     Theme::custom(
         "svp".to_owned(),
         Palette {
-            background: Color::from_rgb8(24, 22, 22),
-            text: Color::from_rgb8(197, 201, 197),
-            primary: Color::from_rgb8(200, 200, 200),
-            success: Color::from_rgb8(81, 205, 160),
+            background: Color::WHITE,
+            text: Color::from_rgb8(28, 28, 30),
+            primary: Color::from_rgb8(90, 90, 96),
+            success: Color::from_rgb8(22, 150, 105),
             danger: Color::from_rgb8(192, 80, 77),
             warning: Color::from_rgb8(238, 216, 139),
         },
