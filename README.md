@@ -20,6 +20,20 @@ cargo run --bin svp-mock-client   # prints what the running server streams
 The server listens on `$XDG_RUNTIME_DIR/svp.sock`; change it with `--socket PATH`
 or `SVP_SOCKET`.
 
+### The app
+
+```sh
+cargo run -p svp-client --features app --bin svp-app   # the dashboard, fed by the running server
+```
+
+It takes the same `--socket PATH` / `SVP_SOCKET` as the server. Start it before
+or after the server: it keeps reconnecting until one answers.
+
+Building needs no system libraries. At run time, on Linux, Iced loads a Wayland
+(`libwayland-client`, `libxkbcommon`) or X11 (`libX11`, `libXcursor`,
+`libxkbcommon-x11`) client library, and a Vulkan (`libvulkan`) or OpenGL
+(`libEGL`) driver; a desktop install has them, and Mesa's drivers are enough.
+
 Logging: the node and svp's actors log through Nautilus, configured with
 `NAUTILUS_LOG`; the server's startup logs through `tracing`, filtered with `RUST_LOG`.
 
