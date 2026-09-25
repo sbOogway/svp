@@ -17,51 +17,12 @@ use std::num::NonZeroUsize;
 
 use nautilus_common::factories::{ClientConfig, DataClientFactory};
 use nautilus_model::identifiers::{self, ClientId, InstrumentId, Symbol};
-
-/// Declares an enum with `ALL`, `as_str`, `Display` and case-insensitive
-/// `FromStr`, all derived from one list. A variant's string is its name, or the
-/// literal after `=` (`Binance = "BINANCE"`).
-macro_rules! named_enum {
-    ($(#[$meta:meta])* $vis:vis enum $name:ident {
-        $($(#[$vmeta:meta])* $variant:ident $(= $string:literal)?),+ $(,)?
-    }) => {
-        $(#[$meta])*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-        $vis enum $name {
-            $($(#[$vmeta])* $variant),+
-        }
-
-        impl $name {
-            pub const ALL: &'static [Self] = &[$(Self::$variant),+];
-
-            pub const fn as_str(self) -> &'static str {
-                match self {
-                    $(Self::$variant => named_enum!(@string $variant $($string)?)),+
-                }
-            }
-        }
-
-        impl std::fmt::Display for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str(self.as_str())
-            }
-        }
-
-        impl std::str::FromStr for $name {
-            type Err = anyhow::Error;
-
-            fn from_str(s: &str) -> anyhow::Result<Self> {
-                Self::ALL
-                    .iter()
-                    .copied()
-                    .find(|v| v.as_str().eq_ignore_ascii_case(s))
-                    .ok_or_else(|| anyhow::anyhow!("unknown {} {s:?}", stringify!($name)))
-            }
-        }
-    };
-    (@string $variant:ident) => { stringify!($variant) };
-    (@string $variant:ident $string:literal) => { $string };
-}
+/// Every venue quotes a coin against its own USD currency: USDT on Binance,
+/// Bybit and OKX, USD on Kraken, Coinbase and Hyperliquid. Each one is
+/// listed in both markets on every venue, except that Hyperliquid has no
+/// spot and Coinbase has no TRX.
+pub use svp_common::market::Coin;
+use svp_common::named_enum;
 
 /// What each exchange module provides. `symbol` is `None` for a market the
 /// exchange doesn't have.
@@ -125,41 +86,6 @@ named_enum! {
         Spot = "SPOT",
         /// Linear perpetual swaps, margined in the quote currency.
         Futures = "FUTURES",
-    }
-}
-
-named_enum! {
-    /// Every venue quotes a coin against its own USD currency: USDT on Binance,
-    /// Bybit and OKX, USD on Kraken, Coinbase and Hyperliquid. Each one is
-    /// listed in both markets on every venue, except that Hyperliquid has no
-    /// spot and Coinbase has no TRX.
-    #[expect(clippy::upper_case_acronyms, reason = "tickers, named as the venues list them")]
-    pub enum Coin {
-        BTC, ETH, SOL, XRP, DOGE, BNB, ADA, AVAX, LINK, LTC, DOT, TRX, SUI, BCH,
-    }
-}
-
-impl Coin {
-    /// How many decimals clients show its USD prices with.
-    pub fn price_decimals(self) -> u8 {
-        match self {
-            Self::BTC | Self::ETH | Self::SOL | Self::BNB | Self::LTC | Self::BCH => 2,
-            Self::AVAX | Self::LINK | Self::DOT => 3,
-            Self::XRP | Self::ADA | Self::SUI => 4,
-            Self::DOGE | Self::TRX => 5,
-        }
-    }
-
-    /// How many decimals clients show its sizes in coins with.
-    pub fn size_decimals(self) -> u8 {
-        match self {
-            Self::BTC => 5,
-            Self::ETH => 4,
-            Self::BNB | Self::BCH => 3,
-            Self::SOL | Self::AVAX | Self::LTC => 2,
-            Self::LINK | Self::DOT | Self::SUI => 1,
-            Self::XRP | Self::DOGE | Self::ADA | Self::TRX => 0,
-        }
     }
 }
 
@@ -472,11 +398,6 @@ mod tests {
         for &venue in Venue::ALL {
             assert_eq!(venue.to_string().parse::<Venue>().unwrap(), venue);
         }
-        for &coin in Coin::ALL {
-            assert_eq!(coin.to_string().parse::<Coin>().unwrap(), coin);
-        }
-        assert!("pepe".parse::<Coin>().is_err());
-        assert_eq!("btc".parse::<Coin>().unwrap(), Coin::BTC);
         assert_eq!("Futures".parse::<Market>().unwrap(), Market::Futures);
         assert!("perp".parse::<Market>().is_err());
     }

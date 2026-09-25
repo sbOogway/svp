@@ -335,8 +335,9 @@ fn market_view<'a>(
     instrument: Option<&Instrument>,
     streams: Streams,
 ) -> Element<'a, Message> {
-    let (price_decimals, size_decimals) =
-        instrument.map_or((u8::MAX, u8::MAX), |i| (i.price_decimals, i.size_decimals));
+    let (price_decimals, size_decimals) = instrument.map_or((u8::MAX, u8::MAX), |i| {
+        (i.coin.price_decimals(), i.coin.size_decimals())
+    });
     let line = |label, value: String| {
         row![
             text(label)

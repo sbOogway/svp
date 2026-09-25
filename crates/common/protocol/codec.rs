@@ -20,6 +20,7 @@ pub fn decode<T: DeserializeOwned>(frame: &[u8]) -> Result<T, DecodeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::market::Coin;
     use crate::protocol::{
         BookData, BookSide, BookUpdate, Instrument, Market, Message, PROTOCOL_VERSION, Price,
         Quantity, Side, Trade,
@@ -75,11 +76,9 @@ mod tests {
                 version: PROTOCOL_VERSION,
                 instruments: vec![Instrument {
                     id: "BTC-PERP.SVP".into(),
-                    coin: "BTC".into(),
+                    coin: Coin::BTC,
                     market: Market::Perp,
                     venues: vec!["BINANCE".into()],
-                    price_decimals: 2,
-                    size_decimals: 5,
                 }],
             },
             Message::Error {

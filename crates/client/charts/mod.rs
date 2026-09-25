@@ -210,7 +210,10 @@ impl App {
 mod tests {
     use std::time::Duration;
 
-    use svp_common::protocol::{Instrument, Market};
+    use svp_common::{
+        market::Coin,
+        protocol::{Instrument, Market},
+    };
     use tokio::sync::mpsc;
 
     use super::{
@@ -224,11 +227,9 @@ mod tests {
             session,
             instruments: vec![Instrument {
                 id: "BTC-PERP.SVP".into(),
-                coin: "BTC".into(),
+                coin: Coin::BTC,
                 market: Market::Perp,
                 venues: vec!["BINANCE".into()],
-                price_decimals: 2,
-                size_decimals: 5,
             }],
             commands,
         };

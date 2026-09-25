@@ -4,35 +4,36 @@
 
 use std::{collections::HashMap, fmt::Debug};
 
-use svp_common::protocol::{BookData, Instrument, Message, Side};
+use svp_common::{
+    market::Coin,
+    protocol::{BookData, Instrument, Message, Side},
+};
 
 pub trait Sink: Debug {
     fn send(&mut self, message: &Message);
 }
 
 /// Logs every message at debug level, prices and sizes with the decimals
-/// their instrument shows.
+/// their coin is shown with.
 #[derive(Debug, Default)]
 pub struct LogSink {
-    decimals: HashMap<String, (u8, u8)>,
+    coins: HashMap<String, Coin>,
 }
 
 impl LogSink {
     pub fn new(instruments: &[Instrument]) -> Self {
         Self {
-            decimals: instruments
-                .iter()
-                .map(|i| (i.id.clone(), (i.price_decimals, i.size_decimals)))
-                .collect(),
+            coins: instruments.iter().map(|i| (i.id.clone(), i.coin)).collect(),
         }
     }
 
     /// Every decimal the units hold for an instrument it wasn't told of.
     fn decimals(&self, instrument: &str) -> (u8, u8) {
-        self.decimals
+        self.coins
             .get(instrument)
-            .copied()
-            .unwrap_or((u8::MAX, u8::MAX))
+            .map_or((u8::MAX, u8::MAX), |coin| {
+                (coin.price_decimals(), coin.size_decimals())
+            })
     }
 }
 
