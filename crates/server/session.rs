@@ -510,7 +510,7 @@ mod tests {
     // 1.x sent prices and sizes as decimal strings.
     #[tokio::test]
     async fn a_1_x_client_is_rejected() {
-        assert_eq!(PROTOCOL_VERSION, Version { major: 2, minor: 0 });
+        assert_eq!(PROTOCOL_VERSION.major, 2);
         assert_rejected(Version { major: 1, minor: 0 }).await;
     }
 

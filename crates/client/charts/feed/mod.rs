@@ -184,8 +184,12 @@ impl Feed {
         self.markets.get(instrument)
     }
 
+    pub fn instrument(&self, id: &str) -> Option<&Instrument> {
+        self.instruments.iter().find(|i| i.id == id)
+    }
+
     pub fn offers(&self, instrument: &str) -> bool {
-        self.instruments.iter().any(|i| i.id == instrument)
+        self.instrument(instrument).is_some()
     }
 
     pub fn apply(&mut self, event: Event) {
@@ -345,6 +349,8 @@ mod tests {
             coin: "BTC".into(),
             market: Kind::Perp,
             venues: vec!["BINANCE".into()],
+            price_decimals: 2,
+            size_decimals: 5,
         }
     }
 

@@ -45,14 +45,17 @@ impl Unified {
                 venues.push(venue.to_owned());
             }
         }
+        let coin = self.members[0].coin;
         protocol::Instrument {
             id: self.instrument_id.to_string(),
-            coin: self.members[0].coin.to_string(),
+            coin: coin.to_string(),
             market: match self.market {
                 Market::Spot => protocol::Market::Spot,
                 Market::Futures => protocol::Market::Perp,
             },
             venues,
+            price_decimals: coin.price_decimals(),
+            size_decimals: coin.size_decimals(),
         }
     }
 }
@@ -288,6 +291,8 @@ mod tests {
                 coin: "BTC".into(),
                 market: protocol::Market::Perp,
                 venues: vec!["BINANCE".into(), "HYPERLIQUID".into()],
+                price_decimals: 2,
+                size_decimals: 5,
             }
         );
     }

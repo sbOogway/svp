@@ -35,7 +35,7 @@ use std::collections::BTreeMap;
 
 pub use codec::{DecodeError, decode, encode};
 use serde::{Deserialize, Serialize};
-pub use unit::{ParseUnitsError, Price, PriceStep, Quantity};
+pub use unit::{Fixed, ParseUnitsError, Price, PriceStep, Quantity};
 
 /// Identifies a bar stream as `venue:symbol:timeframe`, e.g. `BINANCE:BTCUSDT-PERP:1m`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -107,6 +107,10 @@ pub struct Instrument {
     pub coin: String,
     pub market: Market,
     pub venues: Vec<String>,
+    /// How many decimals to show its prices and sizes with, e.g.
+    /// [`Price::fixed`]; the values themselves stay exact.
+    pub price_decimals: u8,
+    pub size_decimals: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,7 +122,7 @@ pub enum Market {
 
 /// The version of this crate's scheme. A minor bump only adds to it, so a
 /// server serves clients of its major and any minor up to its own.
-pub const PROTOCOL_VERSION: Version = Version { major: 2, minor: 0 };
+pub const PROTOCOL_VERSION: Version = Version { major: 2, minor: 1 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Version {
@@ -322,7 +326,7 @@ mod tests {
                 version: PROTOCOL_VERSION,
                 name: "tail".into(),
             },
-            r#"{"type":"hello","version":{"major":2,"minor":0},"name":"tail"}"#,
+            r#"{"type":"hello","version":{"major":2,"minor":1},"name":"tail"}"#,
         );
         roundtrip(
             &Message::Welcome {
@@ -333,9 +337,11 @@ mod tests {
                     coin: "BTC".into(),
                     market: Market::Perp,
                     venues: vec!["BINANCE".into(), "OKX".into()],
+                    price_decimals: 2,
+                    size_decimals: 5,
                 }],
             },
-            r#"{"type":"welcome","session":7,"version":{"major":2,"minor":0},"instruments":[{"id":"BTC-PERP.SVP","coin":"BTC","market":"perp","venues":["BINANCE","OKX"]}]}"#,
+            r#"{"type":"welcome","session":7,"version":{"major":2,"minor":1},"instruments":[{"id":"BTC-PERP.SVP","coin":"BTC","market":"perp","venues":["BINANCE","OKX"],"price_decimals":2,"size_decimals":5}]}"#,
         );
         request(
             &Request::Subscribe {

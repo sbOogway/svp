@@ -31,10 +31,11 @@ pub async fn run(socket: &Path) -> anyhow::Result<()> {
         .add_instrument(Coin::BTC)
         .build()?;
 
-    let instruments = unified::unify(&venue::subscriptions(&feeds))
+    let instruments: Vec<_> = unified::unify(&venue::subscriptions(&feeds))
         .iter()
         .map(unified::Unified::describe)
         .collect();
+    let log = LogSink::new(&instruments);
     let (channel, hub) = ChannelSink::new(4096, instruments);
     let server = unix::Server::bind(socket)
         .await
@@ -46,7 +47,7 @@ pub async fn run(socket: &Path) -> anyhow::Result<()> {
         }
     });
 
-    let sinks: Vec<Box<dyn Sink>> = vec![Box::new(LogSink), Box::new(channel)];
+    let sinks: Vec<Box<dyn Sink>> = vec![Box::new(log), Box::new(channel)];
     let mut node = aggregator::node::build(&feeds, sinks)?;
     node.run().await
 }
