@@ -182,6 +182,20 @@ pub mod button {
         }
     }
 
+    pub fn info(theme: &Theme, _status: Status) -> Style {
+        let palette = theme.extended_palette();
+
+        Style {
+            text_color: palette.background.base.text,
+            border: Border {
+                radius: 3.0.into(),
+                ..Default::default()
+            },
+            background: Some(palette.background.weakest.color.into()),
+            ..Default::default()
+        }
+    }
+
     pub fn menu_body(theme: &Theme, status: Status, is_selected: bool) -> Style {
         let palette = theme.extended_palette();
 
@@ -300,6 +314,37 @@ pub fn chart_modal(theme: &Theme) -> Style {
     }
 }
 
+pub fn modal_container(theme: &Theme) -> Style {
+    let palette = theme.extended_palette();
+
+    Style {
+        text_color: Some(palette.background.base.text),
+        background: Some(palette.background.weakest.color.into()),
+        border: Border {
+            width: 1.0,
+            color: palette.background.weak.color,
+            radius: 4.0.into(),
+        },
+        shadow: Shadow {
+            offset: iced::Vector { x: 0.0, y: 0.0 },
+            blur_radius: 2.0,
+            color: Color::BLACK.scale_alpha(if palette.is_dark { 0.8 } else { 0.2 }),
+        },
+        snap: true,
+    }
+}
+
+pub fn split_ruler(theme: &Theme) -> widget::rule::Style {
+    let palette = theme.extended_palette();
+
+    widget::rule::Style {
+        color: palette.background.strong.color.scale_alpha(0.25),
+        radius: iced::border::Radius::default(),
+        fill_mode: widget::rule::FillMode::Full,
+        snap: true,
+    }
+}
+
 pub fn dashboard_modal(theme: &Theme) -> Style {
     let palette = theme.extended_palette();
 
@@ -334,5 +379,85 @@ pub fn side_text(theme: &Theme, side: Option<svp_common::protocol::Side>) -> wid
             Some(svp_common::protocol::Side::Sell) => Some(palette.danger.base.color),
             None => None,
         },
+    }
+}
+
+pub fn darken(color: Color, amount: f32) -> Color {
+    let mut hsl = to_hsl(color);
+    hsl.l = (hsl.l - amount).max(0.0);
+    from_hsl(&hsl)
+}
+
+pub fn lighten(color: Color, amount: f32) -> Color {
+    let mut hsl = to_hsl(color);
+    hsl.l = (hsl.l + amount).min(1.0);
+    from_hsl(&hsl)
+}
+
+struct Hsl {
+    h: f32,
+    s: f32,
+    l: f32,
+    a: f32,
+}
+
+#[allow(clippy::float_cmp)]
+fn to_hsl(color: Color) -> Hsl {
+    let x_max = color.r.max(color.g).max(color.b);
+    let x_min = color.r.min(color.g).min(color.b);
+    let c = x_max - x_min;
+    let l = x_max.midpoint(x_min);
+
+    let h = if c == 0.0 {
+        0.0
+    } else if x_max == color.r {
+        60.0 * ((color.g - color.b) / c).rem_euclid(6.0)
+    } else if x_max == color.g {
+        60.0 * (((color.b - color.r) / c) + 2.0)
+    } else {
+        60.0 * (((color.r - color.g) / c) + 4.0)
+    };
+
+    let s = if l == 0.0 || l == 1.0 {
+        0.0
+    } else {
+        (x_max - l) / l.min(1.0 - l)
+    };
+
+    Hsl {
+        h,
+        s,
+        l,
+        a: color.a,
+    }
+}
+
+// https://en.wikipedia.org/wiki/HSL_and_HSV#HSL_to_RGB
+fn from_hsl(hsl: &Hsl) -> Color {
+    let c = (1.0 - (2.0 * hsl.l - 1.0).abs()) * hsl.s;
+    let h = hsl.h / 60.0;
+    let x = c * (1.0 - (h.rem_euclid(2.0) - 1.0).abs());
+
+    let (r1, g1, b1) = if h < 1.0 {
+        (c, x, 0.0)
+    } else if h < 2.0 {
+        (x, c, 0.0)
+    } else if h < 3.0 {
+        (0.0, c, x)
+    } else if h < 4.0 {
+        (0.0, x, c)
+    } else if h < 5.0 {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+
+    let m = hsl.l - (c / 2.0);
+
+    Color {
+        r: r1 + m,
+        g: g1 + m,
+        b: b1 + m,
+        a: hsl.a,
     }
 }

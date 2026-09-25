@@ -9,8 +9,11 @@ pub mod sidebar;
 pub mod style;
 
 use iced::{
-    Alignment, Element, Length, Theme, padding,
-    widget::{button, container, mouse_area, opaque, stack, text, tooltip::Position},
+    Alignment, Color, Element, Length, Theme, border, padding,
+    widget::{
+        Column, button, column, container, mouse_area, opaque, row, rule, slider, space, stack,
+        text, tooltip::Position,
+    },
 };
 
 use super::pane::LinkGroup;
@@ -109,6 +112,94 @@ pub fn dashboard_modal<'a, Message: Clone + 'a>(
                 .align_x(align_x)
         )
         .on_press(on_blur)
+    ]
+    .into()
+}
+
+/// `items` one under the other, with a thin rule between each.
+pub fn split_column<'a, Message: 'a>(
+    items: impl IntoIterator<Item = Element<'a, Message>>,
+) -> Column<'a, Message> {
+    let mut col = column![];
+    for (i, item) in items.into_iter().enumerate() {
+        if i > 0 {
+            col = col.push(rule::horizontal(1.0).style(style::split_ruler));
+        }
+        col = col.push(item);
+    }
+    col
+}
+
+pub fn classic_slider_row<'a, Message: Clone + 'a>(
+    label: iced::widget::Text<'a>,
+    slider: Element<'a, Message>,
+    placeholder: Option<iced::widget::Text<'a>>,
+) -> Element<'a, Message> {
+    let slider = if let Some(placeholder) = placeholder {
+        column![slider, placeholder]
+            .spacing(2)
+            .align_x(Alignment::Center)
+    } else {
+        column![slider]
+    };
+
+    container(
+        row![label, slider]
+            .align_y(Alignment::Center)
+            .spacing(8)
+            .padding(8),
+    )
+    .style(style::modal_container)
+    .into()
+}
+
+/// A slider as a bar, with `label` and the value written over it.
+pub fn labeled_slider<'a, Message: Clone + 'a>(
+    label: &'a str,
+    range: std::ops::RangeInclusive<f32>,
+    current: f32,
+    on_change: impl Fn(f32) -> Message + 'a,
+    to_string: impl Fn(f32) -> String,
+    step: f32,
+) -> Element<'a, Message> {
+    let slider = slider(range, current, on_change)
+        .step(step)
+        .width(Length::Fill)
+        .height(24)
+        .style(|theme: &Theme, status| {
+            let palette = theme.extended_palette();
+
+            slider::Style {
+                rail: slider::Rail {
+                    backgrounds: (
+                        palette.background.strong.color.into(),
+                        Color::TRANSPARENT.into(),
+                    ),
+                    width: 24.0,
+                    border: border::rounded(2),
+                },
+                handle: slider::Handle {
+                    shape: slider::HandleShape::Rectangle {
+                        width: 2,
+                        border_radius: 2.0.into(),
+                    },
+                    background: match status {
+                        slider::Status::Active => palette.background.strong.color.into(),
+                        slider::Status::Hovered => palette.primary.base.color.into(),
+                        slider::Status::Dragged => palette.primary.weak.color.into(),
+                    },
+                    border_width: 0.0,
+                    border_color: Color::TRANSPARENT,
+                },
+            }
+        });
+
+    stack![
+        container(slider).style(style::modal_container),
+        row![text(label), space::horizontal(), text(to_string(current))]
+            .padding([0, 10])
+            .height(Length::Fill)
+            .align_y(Alignment::Center),
     ]
     .into()
 }
