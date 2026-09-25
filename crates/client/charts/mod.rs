@@ -3,6 +3,7 @@
 //! sidebar, and a dashboard of panes fed by one connection.
 
 pub mod feed;
+pub mod model;
 pub mod pane;
 pub mod ui;
 
