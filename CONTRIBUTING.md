@@ -15,5 +15,12 @@
    constraint, a non-obvious consequence. No comment that restates a name or a
    signature (`/// Spot.` on `Spot`, `/// Adds a venue.` on `add_venue`). Docs
    are not required on public items: clippy is set up not to ask for them.
-7. Open a PR with the template; rebase-merge into `main` (the only merge method
+7. Code copied or adapted from [flowsurface](https://github.com/flowsurface-rs/flowsurface)
+   (GPL-3.0-or-later) keeps a header crediting the original, e.g.:
+   ```rust
+   // Adapted from flowsurface, https://github.com/flowsurface-rs/flowsurface
+   // (src/chart/kline.rs @ <commit>), GPL-3.0-or-later, by the flowsurface contributors.
+   ```
+   Code from any other source must be GPL-3.0-compatible and credited the same way.
+8. Open a PR with the template; rebase-merge into `main` (the only merge method
    enabled). Every commit lands on `main` as-is, so keep each one meaningful.

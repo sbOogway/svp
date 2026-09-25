@@ -32,5 +32,12 @@ NAUTILUS_LOG="stdout=Debug" cargo run --bin svp-server
 
 ## Licensing
 
-svp is MIT licensed. It depends on NautilusTrader, which is LGPL-3.0; it is used
-as an unmodified library dependency.
+svp is licensed under the GNU General Public License v3.0 only
+(`GPL-3.0-only`); see [LICENSE](LICENSE).
+
+Parts of the frontend and protocol code are copied or adapted from
+[flowsurface](https://github.com/flowsurface-rs/flowsurface) (GPL-3.0-or-later),
+by the flowsurface contributors. Each such file says so in its header.
+
+svp depends on NautilusTrader, which is LGPL-3.0; it is used as an unmodified
+library dependency.
