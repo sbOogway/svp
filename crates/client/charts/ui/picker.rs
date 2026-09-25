@@ -13,7 +13,7 @@ pub fn matches(instrument: &Instrument, query: &str) -> bool {
     let query = query.trim().to_uppercase();
     query.is_empty()
         || instrument.id.to_uppercase().contains(&query)
-        || instrument.coin.to_uppercase().contains(&query)
+        || instrument.coin.as_str().contains(&query)
 }
 
 pub fn view<'a, Message: Clone + 'a>(
@@ -75,17 +75,17 @@ pub fn view<'a, Message: Clone + 'a>(
 
 #[cfg(test)]
 mod tests {
+    use svp_common::market::Coin;
+
     use super::*;
 
     #[test]
     fn a_search_matches_the_id_or_the_coin_in_any_case() {
         let btc = Instrument {
             id: "BTC-PERP.SVP".into(),
-            coin: "BTC".into(),
+            coin: Coin::BTC,
             market: Market::Perp,
             venues: vec![],
-            price_decimals: 2,
-            size_decimals: 5,
         };
         assert!(matches(&btc, ""));
         assert!(matches(&btc, " perp "));

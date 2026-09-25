@@ -331,7 +331,10 @@ impl Feed {
 
 #[cfg(test)]
 mod tests {
-    use svp_common::protocol::{BookData, BookSide, BookUpdate, Market as Kind, Price, Quantity};
+    use svp_common::{
+        market::Coin,
+        protocol::{BookData, BookSide, BookUpdate, Market as Kind, Price, Quantity},
+    };
 
     use super::*;
 
@@ -346,11 +349,9 @@ mod tests {
     pub(super) fn instrument(id: &str) -> Instrument {
         Instrument {
             id: id.into(),
-            coin: "BTC".into(),
+            coin: Coin::BTC,
             market: Kind::Perp,
             venues: vec!["BINANCE".into()],
-            price_decimals: 2,
-            size_decimals: 5,
         }
     }
 

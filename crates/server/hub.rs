@@ -124,11 +124,9 @@ pub(crate) mod tests {
     pub(crate) fn channel(capacity: usize) -> (ChannelSink, Hub) {
         let instrument = |id: &str, coin: &str| Instrument {
             id: id.into(),
-            coin: coin.into(),
+            coin: coin.parse().unwrap(),
             market: Market::Perp,
             venues: vec!["BINANCE".into()],
-            price_decimals: 2,
-            size_decimals: 5,
         };
         ChannelSink::new(
             capacity,
