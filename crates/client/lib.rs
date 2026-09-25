@@ -1,6 +1,9 @@
 //! The client side of the svp protocol, and the clients built on it in
-//! `bin/`: `svp-mock-client` prints what the server streams.
+//! `bin/`: `svp-mock-client` prints what the server streams, and `svp-app`
+//! (with the `app` feature) draws it.
 
+#[cfg(feature = "app")]
+pub mod charts;
 mod session;
 
 use std::{io, path::Path};
