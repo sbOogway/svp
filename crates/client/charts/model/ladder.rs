@@ -435,7 +435,7 @@ pub struct Ladder {
     multiplier: TickMultiplier,
     step: Option<PriceStep>,
     scroll_px: f32,
-    last_book_ms: Option<u64>,
+    last_book_ts: Option<u64>,
     orderbook: [GroupedDepth; 2],
     trades: TradeStore,
     raw_price_spread: Option<Price>,
@@ -454,7 +454,7 @@ impl Ladder {
             multiplier,
             step: None,
             scroll_px: 0.0,
-            last_book_ms: None,
+            last_book_ts: None,
             orderbook: [GroupedDepth::default(), GroupedDepth::default()],
             trades: TradeStore::default(),
             raw_price_spread: None,
@@ -489,9 +489,9 @@ impl Ladder {
     }
 
     /// Adds the trades of a frame, and regroups the book when it changed
-    /// since `book_ms` last did or the step changed. `min_tick` is the
-    /// instrument's.
-    pub fn update(&mut self, min_tick: PriceStep, book: &Book, book_ms: u64, trades: &[Trade]) {
+    /// since `book_ts` (UNIX nanoseconds) last did or the step changed.
+    /// `min_tick` is the instrument's.
+    pub fn update(&mut self, min_tick: PriceStep, book: &Book, book_ts: u64, trades: &[Trade]) {
         let step = self.multiplier.multiply_step(min_tick);
         let step_changed = self.step != Some(step);
         if step_changed {
@@ -500,8 +500,9 @@ impl Ladder {
         }
         self.trades.insert_trades(trades, step);
 
-        if self.last_book_ms != Some(book_ms) {
-            self.insert_depth(book, book_ms, step);
+        if self.last_book_ts != Some(book_ts) {
+            self.last_book_ts = Some(book_ts);
+            self.insert_depth(book, book_ts / 1_000_000, step);
         } else if step_changed {
             self.regroup_from_depth(book, step);
         }
@@ -530,7 +531,6 @@ impl Ladder {
             .maybe_cleanup(update_ms, self.config.trade_retention, step);
 
         self.regroup_from_depth(book, step);
-        self.last_book_ms = Some(update_ms);
     }
 
     fn regroup_from_depth(&mut self, book: &Book, step: PriceStep) {
@@ -830,6 +830,11 @@ mod tests {
         *,
     };
 
+    /// Books are stamped in nanoseconds.
+    fn ms(ms: u64) -> u64 {
+        ms * 1_000_000
+    }
+
     fn book(bids: &[(&str, &str)], asks: &[(&str, &str)]) -> Book {
         let levels =
             |levels: &[(&str, &str)]| levels.iter().map(|&(p, q)| (px(p), qty(q))).collect();
@@ -861,7 +866,7 @@ mod tests {
                 &[("100.4", "1"), ("100.1", "2"), ("99.9", "4")],
                 &[("100.6", "3"), ("100.9", "1"), ("101.2", "0.5")],
             ),
-            1_000,
+            ms(1_000),
             &[],
         );
         ladder
@@ -930,7 +935,7 @@ mod tests {
         ladder.update(
             min_tick(1),
             &b,
-            1_000,
+            ms(1_000),
             &[
                 trade(1_000, "100.3", "1", false),
                 trade(1_000, "100.3", "2", true),
@@ -947,7 +952,7 @@ mod tests {
         assert_eq!(ladder.trade_qty_at(px("100")).sell, qty("2"));
 
         ladder.set_multiplier(TickMultiplier(10));
-        ladder.update(min_tick(1), &b, 1_000, &[]);
+        ladder.update(min_tick(1), &b, ms(1_000), &[]);
         assert_eq!(ladder.step(), Some(step("1")));
         assert_eq!(ladder.trade_qty_at(px("101")).buy, qty("1.5"));
         assert_eq!(ladder.trade_qty_at(px("100")).sell, qty("2"));
@@ -968,17 +973,17 @@ mod tests {
         ladder.update(
             min_tick(0),
             &b,
-            0,
+            ms(0),
             &[trade(0, "100", "1", true), trade(30_000, "101", "1", false)],
         );
-        ladder.update(min_tick(0), &b, 64_000, &[]);
+        ladder.update(min_tick(0), &b, ms(64_000), &[]);
         assert_eq!(
             ladder.trade_qty_at(px("100")).sell,
             qty("1"),
             "within slack"
         );
 
-        ladder.update(min_tick(0), &b, 66_000, &[]);
+        ladder.update(min_tick(0), &b, ms(66_000), &[]);
         assert_eq!(ladder.trade_qty_at(px("100")), TradedQty::default());
         assert_eq!(ladder.trade_qty_at(px("101")).buy, qty("1"));
     }
@@ -991,7 +996,7 @@ mod tests {
         ladder.update(
             min_tick(0),
             &Book::default(),
-            0,
+            ms(0),
             &[trade(0, "90", "1", false), trade(0, "100", "1", true)],
         );
         assert!(!ladder.is_empty());
@@ -1002,8 +1007,13 @@ mod tests {
     #[test]
     fn the_chase_grows_with_each_move_and_fades_when_it_stalls() {
         let mut ladder = Ladder::new(Config::default(), TickMultiplier(1));
-        let mut at = |ms, bid: &str| {
-            ladder.update(min_tick(0), &book(&[(bid, "1")], &[("200", "1")]), ms, &[]);
+        let mut at = |at_ms, bid: &str| {
+            ladder.update(
+                min_tick(0),
+                &book(&[(bid, "1")], &[("200", "1")]),
+                ms(at_ms),
+                &[],
+            );
             ladder.chase(Side::Bid).segment()
         };
         assert_eq!(at(0, "100"), None);
@@ -1024,8 +1034,8 @@ mod tests {
     #[test]
     fn hiding_the_chase_resets_it() {
         let mut ladder = Ladder::new(Config::default(), TickMultiplier(1));
-        for (ms, bid) in [(0, "100"), (100, "101")] {
-            ladder.update(min_tick(0), &book(&[(bid, "1")], &[]), ms, &[]);
+        for (at_ms, bid) in [(0, "100"), (100, "101")] {
+            ladder.update(min_tick(0), &book(&[(bid, "1")], &[]), ms(at_ms), &[]);
         }
         assert!(ladder.chase(Side::Bid).segment().is_some());
         ladder.set_config(Config {

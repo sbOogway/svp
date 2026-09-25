@@ -2,12 +2,17 @@
 //! [flowsurface](https://github.com/flowsurface-rs/flowsurface): a
 //! sidebar, and a dashboard of panes fed by one connection.
 
+pub mod chart;
 pub mod feed;
 pub mod model;
 pub mod pane;
 pub mod ui;
 
-use std::{borrow::Cow, path::PathBuf, time::Instant};
+use std::{
+    borrow::Cow,
+    path::PathBuf,
+    time::{Instant, SystemTime, UNIX_EPOCH},
+};
 
 use iced::{
     Alignment, Element, Length, Subscription, Task, keyboard, padding,
@@ -82,7 +87,8 @@ impl App {
                 Task::none()
             }
             Message::Tick(now) => {
-                self.feed.tick(now);
+                let trades = self.feed.tick(now);
+                self.dashboard.on_frame(&self.feed, &trades, unix_ms());
                 return Task::none();
             }
             Message::Dashboard(message) => self.dashboard.update(message).map(Message::Dashboard),
@@ -207,6 +213,14 @@ impl App {
     }
 }
 
+fn unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| {
+            u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -302,12 +316,18 @@ mod tests {
         assert!(matches!(commands.try_recv(), Ok(Command::Unsubscribe(_))));
         assert!(commands.try_recv().is_err(), "ETH isn't offered");
 
-        let _ = app.update(Message::Dashboard(pane::Message::Clicked(panes[0])));
+        let ladder = app
+            .dashboard
+            .panes()
+            .find(|(_, state)| state.content.kind() == pane::ContentKind::Ladder)
+            .unwrap()
+            .0;
+        let _ = app.update(Message::Dashboard(pane::Message::Clicked(ladder)));
         let _ = app.update(Message::Sidebar(sidebar::Message::Select(
             "BTC-PERP.SVP".into(),
         )));
         assert_eq!(
-            app.dashboard.get(panes[0]).unwrap().instrument.as_deref(),
+            app.dashboard.get(ladder).unwrap().instrument.as_deref(),
             Some("BTC-PERP.SVP")
         );
         assert!(subscribed_to_btc(&mut commands));

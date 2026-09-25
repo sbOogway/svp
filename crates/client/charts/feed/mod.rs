@@ -107,6 +107,8 @@ impl Streams {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Market {
     pub book: Book,
+    /// When the book last changed, in UNIX nanoseconds.
+    pub book_ts: u64,
     pub last_trade: Option<Trade>,
     /// Resyncs since subscribing: trades in each gap are lost.
     pub gaps: u64,
@@ -155,6 +157,8 @@ pub struct Feed {
     markets: HashMap<String, Market>,
     /// Trades wait here for the next frame, so a burst costs one redraw.
     pending: Vec<Trade>,
+    /// What the next [`Feed::tick`] hands to the panes.
+    flushed: Vec<Trade>,
 }
 
 impl Default for Feed {
@@ -166,6 +170,7 @@ impl Default for Feed {
             subscribed: BTreeMap::new(),
             markets: HashMap::new(),
             pending: Vec::new(),
+            flushed: Vec::new(),
         }
     }
 }
@@ -205,6 +210,7 @@ impl Feed {
                 self.subscribed.clear();
                 self.markets.clear();
                 self.pending.clear();
+                self.flushed.clear();
             }
             Event::Received(message) => self.receive(message),
             Event::Disconnected { reason, .. } => {
@@ -214,6 +220,7 @@ impl Feed {
                 self.commands = None;
                 self.subscribed.clear();
                 self.pending.clear();
+                self.flushed.clear();
             }
         }
     }
@@ -230,6 +237,7 @@ impl Feed {
                 if let Some(market) = self.markets.get_mut(&update.instrument) {
                     market.rate.count += 1;
                     market.book.apply(&update.data);
+                    market.book_ts = update.ts;
                 }
             }
             Message::Resync { missed } => {
@@ -246,18 +254,20 @@ impl Feed {
         }
     }
 
-    /// Applies the trades received since the last frame.
-    pub fn tick(&mut self, now: Instant) {
+    /// Applies the trades received since the last frame, and returns them.
+    pub fn tick(&mut self, now: Instant) -> Vec<Trade> {
         self.flush();
         for market in self.markets.values_mut() {
             market.rate.sample(now);
         }
+        std::mem::take(&mut self.flushed)
     }
 
     fn flush(&mut self) {
         for trade in self.pending.drain(..) {
             if let Some(market) = self.markets.get_mut(&trade.instrument) {
-                market.last_trade = Some(trade);
+                market.last_trade = Some(trade.clone());
+                self.flushed.push(trade);
             }
         }
     }
@@ -309,11 +319,17 @@ impl Feed {
             let market = self.markets.entry(id.clone()).or_default();
             if !streams.books {
                 market.book = Book::default();
+                market.book_ts = 0;
             }
             if !streams.trades {
                 market.last_trade = None;
             }
         }
+        self.flushed.retain(|trade| {
+            self.subscribed
+                .get(&trade.instrument)
+                .is_some_and(|s| s.trades)
+        });
     }
 
     /// The union of what each of `wanted` needs, per instrument.
@@ -483,10 +499,15 @@ mod tests {
         feed.apply(Event::Received(trade("B", "1")));
         assert_eq!(feed.market("A").unwrap().last_trade, None);
 
-        feed.tick(Instant::now());
+        let trades = feed.tick(Instant::now());
         let last = feed.market("A").unwrap().last_trade.as_ref().unwrap();
         assert_eq!(last.price, px("101"));
         assert!(feed.market("B").is_none());
+        assert_eq!(
+            trades.iter().map(|t| t.price).collect::<Vec<_>>(),
+            [px("100"), px("101")]
+        );
+        assert!(feed.tick(Instant::now()).is_empty());
     }
 
     #[test]
@@ -507,7 +528,9 @@ mod tests {
             },
         })));
 
-        let book = &feed.market("A").unwrap().book;
+        let market = feed.market("A").unwrap();
+        assert_eq!(market.book_ts, 2);
+        let book = &market.book;
         assert_eq!(book.best_bid(), Some((px("100"), qty("2"))));
         assert_eq!(book.best_ask(), Some((px("102"), qty("3"))));
     }
@@ -523,6 +546,7 @@ mod tests {
         let market = feed.market("A").unwrap();
         assert_eq!((market.gaps, market.missed), (1, 7));
         assert_eq!(market.last_trade.as_ref().unwrap().price, px("100"));
+        assert_eq!(feed.tick(Instant::now()).len(), 1, "the panes still get it");
     }
 
     #[test]
