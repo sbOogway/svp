@@ -1,0 +1,30 @@
+Font license info
+
+Copied from flowsurface, https://github.com/flowsurface-rs/flowsurface
+(assets/fonts @ ab8f3c1). icons.ttf is a Fontello build of the two sets below.
+
+
+## Font Awesome
+
+   Copyright (C) 2016 by Dave Gandy
+
+   Author:    Dave Gandy
+   License:   SIL ()
+   Homepage:  http://fortawesome.github.com/Font-Awesome/
+
+
+## Entypo
+
+   Copyright (C) 2012 by Daniel Bruce
+
+   Author:    Daniel Bruce
+   License:   SIL (http://scripts.sil.org/OFL)
+   Homepage:  http://www.entypo.com
+
+
+## Azeret Mono (AzeretMono-Regular.ttf)
+
+   Copyright 2021 The Azeret Project Authors
+
+   License:   SIL Open Font License 1.1 (http://scripts.sil.org/OFL)
+   Homepage:  https://github.com/displaay/azeret

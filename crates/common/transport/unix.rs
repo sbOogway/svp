@@ -1,6 +1,7 @@
 //! Frames over a Unix domain socket, each prefixed with its length.
 
 use std::{
+    ffi::OsString,
     io,
     path::{Path, PathBuf},
 };
@@ -15,6 +16,24 @@ pub fn default_path() -> PathBuf {
     std::env::var_os("XDG_RUNTIME_DIR")
         .map_or_else(std::env::temp_dir, PathBuf::from)
         .join("svp.sock")
+}
+
+/// The socket a binary uses, from its arguments (without the program
+/// name) and `SVP_SOCKET`: `--socket PATH`, else the variable, else
+/// [`default_path`].
+pub fn socket_path(
+    mut args: impl Iterator<Item = OsString>,
+    env: Option<OsString>,
+) -> io::Result<PathBuf> {
+    let invalid = |message: String| io::Error::new(io::ErrorKind::InvalidInput, message);
+    match args.next() {
+        None => Ok(env.map_or_else(default_path, PathBuf::from)),
+        Some(flag) if flag == "--socket" => args
+            .next()
+            .map(PathBuf::from)
+            .ok_or_else(|| invalid("--socket needs a path".into())),
+        Some(other) => Err(invalid(format!("unknown argument {}", other.display()))),
+    }
 }
 
 /// Accepts connections on a socket file, which it removes when dropped.
@@ -74,6 +93,33 @@ mod tests {
     use futures::{SinkExt, StreamExt};
 
     use super::*;
+
+    fn args(args: &[&str]) -> impl Iterator<Item = OsString> {
+        args.iter()
+            .map(OsString::from)
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+
+    #[test]
+    fn socket_flag_beats_env_beats_default() {
+        let env = || Some(OsString::from("/env.sock"));
+        assert_eq!(
+            socket_path(args(&["--socket", "/flag.sock"]), env()).unwrap(),
+            PathBuf::from("/flag.sock")
+        );
+        assert_eq!(
+            socket_path(args(&[]), env()).unwrap(),
+            PathBuf::from("/env.sock")
+        );
+        assert_eq!(socket_path(args(&[]), None).unwrap(), default_path());
+    }
+
+    #[test]
+    fn rejects_a_bare_flag_and_unknown_arguments() {
+        assert!(socket_path(args(&["--socket"]), None).is_err());
+        assert!(socket_path(args(&["--port", "1"]), None).is_err());
+    }
 
     #[tokio::test]
     async fn frames_cross_the_socket_both_ways() {
