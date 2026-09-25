@@ -14,7 +14,6 @@ path = "lib.rs"
 [dependencies]
 bytes = { workspace = true }
 rmp-serde = { workspace = true }
-rust_decimal = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["net"] }
 tokio-util = { workspace = true }

@@ -31,8 +31,6 @@ nautilus-live = "=0.64.0"
 nautilus-model = "=0.64.0"
 nautilus-okx = "=0.64.0"
 rmp-serde = "1"
-# Nautilus converts its prices and sizes to it exactly.
-rust_decimal = { version = "1.43", default-features = false, features = ["std"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
