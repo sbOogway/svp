@@ -4,12 +4,12 @@
 //! integers, in every format.
 
 mod price;
-mod qty;
+mod quantity;
 
 use std::{fmt, str::FromStr};
 
 pub use price::{Price, PriceStep};
-pub use qty::Quantity;
+pub use quantity::Quantity;
 
 /// A decimal string that is not a whole number of units.
 #[derive(Debug, Clone, PartialEq, Eq)]
