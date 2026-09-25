@@ -224,6 +224,14 @@ impl Book {
         }
     }
 
+    pub fn bids(&self) -> &BTreeMap<Price, Quantity> {
+        &self.bids
+    }
+
+    pub fn asks(&self) -> &BTreeMap<Price, Quantity> {
+        &self.asks
+    }
+
     pub fn best_bid(&self) -> Option<(Price, Quantity)> {
         self.bids.last_key_value().map(|(&p, &s)| (p, s))
     }

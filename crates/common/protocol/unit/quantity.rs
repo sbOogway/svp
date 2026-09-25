@@ -44,6 +44,18 @@ impl Quantity {
     pub const fn is_zero(self) -> bool {
         self.units == 0
     }
+
+    /// Lossy: convert qty to f32, may lose precision beyond `QTY_SCALE`
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn to_f32_lossy(self) -> f32 {
+        self.to_f64() as f32
+    }
+
+    #[allow(clippy::cast_precision_loss)]
+    pub fn to_f64(self) -> f64 {
+        let scale = 10f64.powi(Self::QTY_SCALE);
+        (self.units as f64) / scale
+    }
 }
 
 impl std::ops::Add for Quantity {

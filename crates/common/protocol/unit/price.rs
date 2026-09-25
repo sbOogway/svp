@@ -97,6 +97,32 @@ impl Price {
             units: self.units.saturating_sub(rhs.units),
         }
     }
+
+    /// Convert price to f64.  f64 has ~15 significant digits.
+    #[allow(clippy::cast_precision_loss)]
+    pub fn to_f64(self) -> f64 {
+        let scale = 10f64.powi(Self::ATOMIC_SCALE);
+        (self.units as f64) / scale
+    }
+
+    #[must_use]
+    pub fn add_steps(self, steps: i64, step: PriceStep) -> Self {
+        Self::from_units(
+            self.units
+                .checked_add(steps.saturating_mul(step.units))
+                .expect("add_steps overflowed"),
+        )
+    }
+
+    /// Number of step increments between low..=high (inclusive), or None if invalid.
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn steps_between_inclusive(low: Price, high: Price, step: PriceStep) -> Option<usize> {
+        if high.units < low.units || step.units <= 0 {
+            return None;
+        }
+        let span = high.units.checked_sub(low.units)?;
+        Some((span / step.units) as usize + 1)
+    }
 }
 
 impl std::ops::Add for Price {

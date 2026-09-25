@@ -248,6 +248,35 @@ mod tests {
     }
 
     #[test]
+    fn steps_walk_and_count_the_grid() {
+        assert_eq!(px("100").add_steps(3, step("0.5")), px("101.5"));
+        assert_eq!(px("100").add_steps(-2, step("5")), px("90"));
+        assert_eq!(
+            Price::steps_between_inclusive(px("99"), px("100"), step("0.5")),
+            Some(3)
+        );
+        assert_eq!(
+            Price::steps_between_inclusive(px("100"), px("100"), step("0.5")),
+            Some(1)
+        );
+        assert_eq!(
+            Price::steps_between_inclusive(px("101"), px("100"), step("0.5")),
+            None
+        );
+        assert_eq!(
+            Price::steps_between_inclusive(px("99"), px("100"), PriceStep { units: 0 }),
+            None
+        );
+    }
+
+    #[test]
+    fn floats_are_for_drawing() {
+        assert!((px("83470.9").to_f64() - 83470.9).abs() < 1e-9);
+        assert!((qty("0.25").to_f64() - 0.25).abs() < f64::EPSILON);
+        assert!((qty("1.5").to_f32_lossy() - 1.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
     fn bids_floor_and_asks_ceil() {
         assert_eq!(
             px("83470.99").round_to_side_step(true, step("0.1")),
