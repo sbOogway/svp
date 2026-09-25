@@ -12,10 +12,10 @@ fmt:
 	cargo fmt --all --check
 
 lint: 
-	cargo clippy --workspace --all-targets -- -D warnings
+	cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 test:
-	cargo test --workspace
+	cargo test --workspace --all-features
 
 audit:
 	@if command -v cargo-audit >/dev/null; then cargo audit; else echo "cargo-audit not installed: cargo install cargo-audit --locked"; fi

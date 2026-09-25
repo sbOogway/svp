@@ -219,6 +219,14 @@ impl Book {
         }
     }
 
+    pub fn best_bid(&self) -> Option<(Price, Quantity)> {
+        self.bids.last_key_value().map(|(&p, &s)| (p, s))
+    }
+
+    pub fn best_ask(&self) -> Option<(Price, Quantity)> {
+        self.asks.first_key_value().map(|(&p, &s)| (p, s))
+    }
+
     pub fn snapshot(&self) -> BookData {
         BookData::Snapshot {
             bids: self.bids.iter().rev().map(|(&p, &s)| (p, s)).collect(),
@@ -397,6 +405,8 @@ mod tests {
                 asks: vec![(px("101"), qty("4")), (px("102"), qty("1"))],
             }
         );
+        assert_eq!(book.best_bid(), Some((px("100"), qty("2"))));
+        assert_eq!(book.best_ask(), Some((px("101"), qty("4"))));
 
         let mut copy = Book::default();
         copy.apply(&book.snapshot());

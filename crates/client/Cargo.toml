@@ -15,11 +15,19 @@ path = "lib.rs"
 name = "svp-mock-client"
 path = "bin/svp-mock-client.rs"
 
+[features]
+app = ["dep:iced"]
+
 [dependencies]
 svp-common = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
+iced = { workspace = true, optional = true }
 tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["io-util"] }
+tokio-util = { workspace = true }
 
 [lints]
 workspace = true

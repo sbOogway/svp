@@ -18,6 +18,8 @@ anyhow = "1"
 async-trait = "0.1"
 bytes = "1"
 futures = "0.3"
+# The app's GUI, behind svp-client's `app` feature.
+iced = { version = "0.14", default-features = false, features = ["wgpu", "tokio", "canvas", "crisp", "x11", "wayland"] }
 log = "0.4"
 # Nautilus is pinned exactly: its Rust API changes between the ~biweekly releases.
 nautilus-binance = "=0.64.0"
