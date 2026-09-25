@@ -41,8 +41,7 @@ fn parse_units(s: &str, scale: i32) -> Result<i64, ParseUnitsError> {
     Ok(if negative { -units } else { units })
 }
 
-/// Writes every decimal of `scale`, trailing zeros too, so values line up
-/// in logs and columns.
+/// Exact, without trailing zeros.
 fn fmt_units(units: i64, scale: i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     let scale = u32::try_from(scale).expect("scales are positive");
     let one = 10_u64.pow(scale);
@@ -51,7 +50,54 @@ fn fmt_units(units: i64, scale: i32, f: &mut fmt::Formatter<'_>) -> fmt::Result 
         f.write_str("-")?;
     }
     write!(f, "{}", magnitude / one)?;
-    write!(f, ".{:0width$}", magnitude % one, width = scale as usize)
+    let fraction = magnitude % one;
+    if fraction == 0 {
+        return Ok(());
+    }
+    let fraction = format!("{fraction:0width$}", width = scale as usize);
+    write!(f, ".{}", fraction.trim_end_matches('0'))
+}
+
+/// A value shown with exactly `decimals` decimals, trailing zeros too,
+/// rounded half away from zero past them: for people, not for the wire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Fixed {
+    units: i64,
+    scale: u32,
+    decimals: u32,
+}
+
+impl Fixed {
+    fn new(units: i64, scale: i32, decimals: u8) -> Self {
+        let scale = u32::try_from(scale).expect("scales are positive");
+        Self {
+            units,
+            scale,
+            decimals: u32::from(decimals).min(scale),
+        }
+    }
+}
+
+impl fmt::Display for Fixed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let dropped = 10_u64.pow(self.scale - self.decimals);
+        // Below i64::MAX plus half a step, so it can't overflow a u64.
+        let rounded = (self.units.unsigned_abs() + dropped / 2) / dropped;
+        if self.units < 0 && rounded != 0 {
+            f.write_str("-")?;
+        }
+        let one = 10_u64.pow(self.decimals);
+        write!(f, "{}", rounded / one)?;
+        if self.decimals > 0 {
+            write!(
+                f,
+                ".{:0width$}",
+                rounded % one,
+                width = self.decimals as usize
+            )?;
+        }
+        Ok(())
+    }
 }
 
 macro_rules! decimal_strings {
@@ -61,6 +107,12 @@ macro_rules! decimal_strings {
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 parse_units(s, $scale).map(|units| Self { units })
+            }
+        }
+
+        impl $name {
+            pub fn fixed(self, decimals: u8) -> Fixed {
+                Fixed::new(self.units, $scale, decimals)
             }
         }
 
@@ -106,13 +158,32 @@ mod tests {
                 units: 10_000_000_000
             }
         );
-        assert_eq!(px("83470.9").to_string(), "83470.90000000000");
-        assert_eq!(px("84450").to_string(), "84450.00000000000");
-        assert_eq!(px("-0.5").to_string(), "-0.50000000000");
-        assert_eq!(qty("12").to_string(), "12.00000000");
-        assert_eq!(qty("0.02").to_string(), "0.02000000");
-        assert_eq!(qty("-0.00000001").to_string(), "-0.00000001");
-        assert_eq!(Quantity::ZERO.to_string(), "0.00000000");
+        assert_eq!(px("83470.90").to_string(), "83470.9");
+        assert_eq!(px("-0.5").to_string(), "-0.5");
+        assert_eq!(qty("12").to_string(), "12");
+        assert_eq!(Quantity::ZERO.to_string(), "0");
+    }
+
+    #[test]
+    fn fixed_shows_exactly_its_decimals() {
+        assert_eq!(px("84450").fixed(2).to_string(), "84450.00");
+        assert_eq!(px("84394.2").fixed(2).to_string(), "84394.20");
+        assert_eq!(px("84351.445").fixed(2).to_string(), "84351.45");
+        assert_eq!(px("-84351.445").fixed(2).to_string(), "-84351.45");
+        assert_eq!(px("-0.004").fixed(2).to_string(), "0.00");
+        assert_eq!(px("99.995").fixed(2).to_string(), "100.00");
+        assert_eq!(px("1.5").fixed(0).to_string(), "2");
+        assert_eq!(qty("0.028").fixed(5).to_string(), "0.02800");
+        assert_eq!(qty("0.00000999").fixed(5).to_string(), "0.00001");
+        assert_eq!(
+            qty("0.1").fixed(12).to_string(),
+            "0.10000000",
+            "at most the scale"
+        );
+        assert_eq!(
+            Price::from_units(i64::MIN).fixed(0).to_string(),
+            "-92233720"
+        );
     }
 
     #[test]

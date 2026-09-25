@@ -8,7 +8,7 @@ use iced::{
         Id, button, center, checkbox, column, container, pane_grid, row, text, tooltip::Position,
     },
 };
-use svp_common::protocol::{Price, Quantity};
+use svp_common::protocol::{Instrument, Price, Quantity};
 
 use super::{LinkGroup, Message};
 use crate::charts::{
@@ -313,7 +313,7 @@ fn placeholder<'a>(state: &'a State, feed: &'a Feed) -> Element<'a, Message> {
             .size(style::text_size::SECTION)
             .into(),
         Some(id) => match feed.market(id) {
-            Some(market) => market_view(market, state.streams),
+            Some(market) => market_view(market, feed.instrument(id), state.streams),
             None if matches!(feed.status(), Status::Connected { .. }) && !feed.offers(id) => {
                 text(format!("The server doesn't offer {id}"))
                     .size(style::text_size::SECTION)
@@ -328,7 +328,15 @@ fn placeholder<'a>(state: &'a State, feed: &'a Feed) -> Element<'a, Message> {
     center(column![body, status].spacing(16).align_x(Alignment::Center)).into()
 }
 
-fn market_view(market: &Market, streams: Streams) -> Element<'_, Message> {
+/// Prices and sizes with the decimals `instrument` shows; all of them
+/// without it.
+fn market_view<'a>(
+    market: &'a Market,
+    instrument: Option<&Instrument>,
+    streams: Streams,
+) -> Element<'a, Message> {
+    let (price_decimals, size_decimals) =
+        instrument.map_or((u8::MAX, u8::MAX), |i| (i.price_decimals, i.size_decimals));
     let line = |label, value: String| {
         row![
             text(label)
@@ -344,7 +352,13 @@ fn market_view(market: &Market, streams: Streams) -> Element<'_, Message> {
     let level = |level: Option<(Price, Quantity)>| {
         level.map_or_else(
             || "-".to_owned(),
-            |(price, size)| format!("{price} × {size}"),
+            |(price, size)| {
+                format!(
+                    "{} × {}",
+                    price.fixed(price_decimals),
+                    size.fixed(size_decimals)
+                )
+            },
         )
     };
 
@@ -358,8 +372,8 @@ fn market_view(market: &Market, streams: Streams) -> Element<'_, Message> {
                     .style(style::secondary_text),
                 text(format!(
                     "{} × {}  {}",
-                    trade.price,
-                    trade.size,
+                    trade.price.fixed(price_decimals),
+                    trade.size.fixed(size_decimals),
                     clock(trade.ts)
                 ))
                 .font(style::AZERET_MONO)

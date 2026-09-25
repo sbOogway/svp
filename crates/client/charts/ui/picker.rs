@@ -84,6 +84,8 @@ mod tests {
             coin: "BTC".into(),
             market: Market::Perp,
             venues: vec![],
+            price_decimals: 2,
+            size_decimals: 5,
         };
         assert!(matches(&btc, ""));
         assert!(matches(&btc, " perp "));

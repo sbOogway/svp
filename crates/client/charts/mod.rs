@@ -227,6 +227,8 @@ mod tests {
                 coin: "BTC".into(),
                 market: Market::Perp,
                 venues: vec!["BINANCE".into()],
+                price_decimals: 2,
+                size_decimals: 5,
             }],
             commands,
         };

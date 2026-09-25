@@ -139,6 +139,30 @@ named_enum! {
     }
 }
 
+impl Coin {
+    /// How many decimals clients show its USD prices with.
+    pub fn price_decimals(self) -> u8 {
+        match self {
+            Self::BTC | Self::ETH | Self::SOL | Self::BNB | Self::LTC | Self::BCH => 2,
+            Self::AVAX | Self::LINK | Self::DOT => 3,
+            Self::XRP | Self::ADA | Self::SUI => 4,
+            Self::DOGE | Self::TRX => 5,
+        }
+    }
+
+    /// How many decimals clients show its sizes in coins with.
+    pub fn size_decimals(self) -> u8 {
+        match self {
+            Self::BTC => 5,
+            Self::ETH => 4,
+            Self::BNB | Self::BCH => 3,
+            Self::SOL | Self::AVAX | Self::LTC => 2,
+            Self::LINK | Self::DOT | Self::SUI => 1,
+            Self::XRP | Self::DOGE | Self::ADA | Self::TRX => 0,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct DataClientSpec {
     pub factory: Box<dyn DataClientFactory>,
